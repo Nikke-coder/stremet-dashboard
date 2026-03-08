@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
-const PASSWORD   = 'stremet2026!'
+const PASSWORD   = 'kloGheT195@'
 const SESSION_KEY = 'stremet_auth'
 const ACCENT      = '#818cf8'
 
