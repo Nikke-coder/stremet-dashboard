@@ -1069,7 +1069,7 @@ function Dashboard() {
             <span style={{fontSize:10,fontWeight:700,color:"#fff",fontFamily:"'DM Mono',monospace"}}>TF</span>
           </div>
           <div>
-            <div style={{fontSize:14,fontWeight:600}}>Suomen Niittysiemen Oy</div>
+            <div style={{fontSize:14,fontWeight:600}}>Stremet Oy</div>
             <div style={{fontSize:10,color:"#334155",fontFamily:"'DM Mono',monospace"}}>Financial Dashboard · {year}</div>
           </div>
         </div>
