@@ -27,7 +27,7 @@ const STYLE = `
 
 
 // ─── CLIENT CONFIG ───────────────────────────────────────────────────────────
-const PASSWORD    = 'kloGheT195@';
+const PASSWORD    = 'stremet2026!';
 const SESSION_KEY = 'stremet_auth';
 const ACCENT      = '#818cf8';
 const CLIENT_NAME = 'Stremet Oy';
