@@ -27,7 +27,7 @@ const STYLE = `
 
 
 // ─── CLIENT CONFIG ───────────────────────────────────────────────────────────
-const PASSWORD    = 'kloGheT195@';
+const PASSWORD    = 'stremet2026!';
 const SESSION_KEY = 'stremet_auth';
 const ACCENT      = '#818cf8';
 const CLIENT_NAME = 'Stremet Oy';
@@ -889,8 +889,8 @@ function Dashboard() {
   };
   const isGroup=entities.length>1;
 
-  const actuals    = actData||actBase;
-  const comp       = csvData||budBase;
+  const actuals    = actData||(DATA_BY_YEAR[year]||actBase);
+  const comp       = csvData||(DATA_BY_YEAR[year]||budBase);
   const compLabel  = mode==="budget"?"BUD":"FC";
   const S=startM,E=endM;
   const visMonths  = MONTHS.slice(S,E+1);
