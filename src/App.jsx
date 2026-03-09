@@ -945,6 +945,7 @@ function SettingsMenu() {
   const doChangePw = async () => {
     if (!pw || pw.length < 8) { showMsg("Minimum 8 characters", true); return; }
     if (pw !== pw2) { showMsg("Passwords don't match", true); return; }
+    if (!supabase) { showMsg("Auth not configured", true); return; }
     setLoad(true);
     const { error } = await supabase.auth.updateUser({ password: pw });
     if (error) { showMsg(error.message, true); }
@@ -1727,6 +1728,7 @@ function LoginScreen({onLogin}) {
 
   const doLogin = async () => {
     setLoad(true); setErr("");
+    if (!supabase) { showErr("Auth not configured — contact Targetflow"); setLoad(false); return; }
     // Check email whitelist before even attempting login
     if (!ALLOWED_EMAILS.map(e=>e.toLowerCase()).includes(email.toLowerCase())) {
       showErr("You don't have access to this dashboard"); setLoad(false); return;
@@ -1864,6 +1866,7 @@ function AppWithAuth() {
   const [checked, setChecked] = React.useState(false);
 
   React.useEffect(()=>{
+    if(!supabase){ setChecked(true); return; }
     supabase.auth.getSession().then(async({data:{session}})=>{
       if(session){
         const{data:aal}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
