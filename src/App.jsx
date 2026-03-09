@@ -27,7 +27,7 @@ const STYLE = `
 
 
 // ─── CLIENT CONFIG ───────────────────────────────────────────────────────────
-const PASSWORD    = 'anasdgwq2346';
+const PASSWORD    = 'stremet2026!';
 const SESSION_KEY = 'stremet_auth';
 const ACCENT      = '#818cf8';
 const CLIENT_NAME = 'Stremet Oy';
@@ -1505,8 +1505,8 @@ function LoginScreen({onLogin}) {
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#080b12",fontFamily:"'DM Sans',sans-serif"}}>
       <div style={{width:340,padding:"40px 36px",background:"#0c1420",border:"1px solid #1e2d45",borderRadius:16,boxShadow:"0 20px 60px #000c"}}>
         <div style={{marginBottom:28,textAlign:"center"}}>
-          <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",letterSpacing:-0.5}}>Targetflow</div>
-          <div style={{fontSize:13,color:ACCENT,fontFamily:"'DM Mono',monospace",marginTop:4}}>Stremet Oy</div>
+          <img src="https://y-lehti.fi/wp-content/uploads/2024/09/logo_tf-1024x293.png" alt="Targetflow" style={{width:180,marginBottom:12,filter:"brightness(0) invert(1)"}}/>
+          <div style={{fontSize:13,color:ACCENT,fontFamily:"'DM Mono',monospace"}}>Stremet Oy</div>
         </div>
         <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}
           placeholder="Password"
