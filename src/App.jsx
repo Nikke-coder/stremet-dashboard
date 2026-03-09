@@ -972,8 +972,38 @@ function Dashboard() {
   };
   const isGroup=entities.length>1;
 
-  const actuals    = actData||(DATA_BY_YEAR[year]||actBase);
-  const comp       = csvData||(DATA_BY_YEAR[year]||budBase);
+  const _rawAct    = actData||(DATA_BY_YEAR[year]||actBase);
+  const _rawComp   = csvData||(DATA_BY_YEAR[year]||budBase);
+  const Z12 = ()=>[0,0,0,0,0,0,0,0,0,0,0,0];
+  const norm = (d) => ({
+    revenue:     d.revenue     || Z12(),
+    cogs:        d.cogs        || Z12(),
+    opex:        d.opex        || Z12(),
+    ebitda:      d.ebitda      || Z12(),
+    depAmort:    d.depAmort    || Z12(),
+    ebit:        d.ebit        || Z12(),
+    finExpenses: d.finExpenses || Z12(),
+    ebt:         d.ebt         || Z12(),
+    tax:         d.tax         || Z12(),
+    netProfit:   d.netProfit   || Z12(),
+    grossProfit: d.grossProfit || (d.revenue&&d.cogs ? d.revenue.map((v,i)=>v-(d.cogs[i]||0)) : Z12()),
+    inventory:   d.inventory   || Z12(),
+    receivables: d.receivables || Z12(),
+    payables:    d.payables    || Z12(),
+    equity:      d.equity      || Z12(),
+    cash:        d.cash        || Z12(),
+    ltDebt:      d.ltDebt      || Z12(),
+    stDebt:      d.stDebt      || Z12(),
+    otherCL:     d.otherCL     || Z12(),
+    tangibles:   d.tangibles   || Z12(),
+    otherCA:     d.otherCA     || Z12(),
+    wcChange:    d.wcChange    || Z12(),
+    cfOp:        d.cfOp        || d.ebitda || Z12(),
+    cfInv:       d.cfInv       || Z12(),
+    cfFin:       d.cfFin       || Z12(),
+  });
+  const actuals    = norm(_rawAct);
+  const comp       = norm(_rawComp);
   const compLabel  = mode==="budget"?"BUD":"FC";
   const S=startM,E=endM;
   const visMonths  = MONTHS.slice(S,E+1);
