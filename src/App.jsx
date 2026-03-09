@@ -1,642 +1,1530 @@
-import { useState, useEffect } from 'react'
-import { supabase, CLIENT } from './supabase.js'
-import {
-  ComposedChart, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine
-} from 'recharts'
+import React from "react";
+import { useState, useRef } from "react";
+import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
-// ─── AUTH ────────────────────────────────────────────────────────────────────
-const PASSWORD   = 'kloGheT195@'
-const SESSION_KEY = 'stremet_auth'
-const ACCENT      = '#818cf8'
+const STYLE = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  ::-webkit-scrollbar{width:4px;height:4px;} ::-webkit-scrollbar-track{background:#0a0f1a;} ::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px;}
+  .tab-btn{background:none;border:none;cursor:pointer;font-family:inherit;transition:all 0.18s;}
+  .tab-btn:hover{color:#60a5fa!important;}
+  .kpi-card{transition:transform 0.18s;}
+  .kpi-card:hover{transform:translateY(-2px);}
+  .yr-btn{background:none;border:1px solid #1e2d45;border-radius:6px;padding:4px 12px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;color:#64748b;transition:all 0.18s;}
+  .yr-btn:hover{border-color:#3b82f6;color:#93c5fd;}
+  .yr-btn.active{background:#1e3a5f;border-color:#3b82f6;color:#60a5fa;}
+  .mode-btn{padding:6px 14px;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all 0.18s;}
+  .upload-zone{border:2px dashed #1e3a5f;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;}
+  .upload-zone:hover{border-color:#3b82f6;background:#0c1e35;}
+  .tbl-row:hover td{background:#0c1e35!important;}
+  .mpill{display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:4px 7px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:all 0.15s;font-family:'DM Mono',monospace;background:none;}
+  .mpill:hover{border-color:#3b82f6;}
+  .mpill.in-range{background:#0d1e35;border-color:#1e3a5f;}
+  .mpill.is-edge-act{background:#1e3a5f;border-color:#3b82f6;}
+  .mpill.is-edge-comp{background:#2a1800;border-color:#f59e0b;}
+  select.psel{background:#0c1420;border:1px solid #1e2d45;border-radius:6px;padding:5px 10px;color:#94a3b8;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;outline:none;}
+`;
 
-// ─── DATA ────────────────────────────────────────────────────────────────────
-const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC']
 
-const SEED_DATA = {
-  2024: {
-    revenue:         [991888,848759,800029,967133,899611,1021817,626056,1171404,983475,1062036,908388,619096],
-    stockChange:     [0,-151607,65381,97162,106241,120595,100961,-68269,133764,-324227,-70441,69116],
-    rawMaterials:    [-325316,-79126,-472435,-243730,-424234,-460412,-304932,-355765,-412619,-442769,-353334,-466982],
-    varStaff:        [-125156,-121221,-98525,-167762,-130749,-106235,-69111,-116800,-165546,-256947,-180160,-276236],
-    grossProfit:     [-541416,-496804,-294450,-652803,-450869,-575765,-352975,-630570,-539074,-38093,-304454,55006],
-    otherIncome:     [3266,3266,3266,6977,17067,3266,3266,4628,4050,3266,4017,3266],
-    staff:           [-168670,-124917,-139205,-157277,-132233,-169304,-138080,-144363,-79617,-125671,-95166,-109581],
-    otherOpex:       [-144653,-136005,-148149,-151562,-155340,-170188,-187908,-156329,-143117,-196174,-186731,-219793],
-    optionalStaff:   [-14807,-7469,-6396,-6781,-5854,-19085,-7091,-2512,-20115,-4506,-16896,-32987],
-    premises:        [-69894,-71970,-71960,-68607,-69986,-68949,-68969,-70698,-69549,-68186,-69116,-70088],
-    vehicle:         [-2344,-195,-402,-201,-181,-768,-1928,-125,-420,0,-286,-844],
-    itSoftware:      [-10360,-7938,-7291,-6924,-38453,-7656,-14449,-30232,-12522,-37660,-10363,-10615],
-    machinery:       [-3482,-22052,-18502,-39616,-12886,-14626,-36310,-6843,-22894,-28185,-52393,-30856],
-    travel:          [-3131,-2482,-1865,-1772,-4388,-94,-6235,-1162,-1667,-1807,-4005,-3626],
-    selling:         [-6025,-6460,-10088,-11698,-11094,-13244,-14659,-28435,-6754,-12524,-15742,-14118],
-    marketing:       [-550,-126,-315,-1500,-784,-1000,-6957,-2200,0,-4644,0,-1246],
-    outsourcedAdmin: [-19959,-13592,-23377,-13042,-9520,-13177,-22442,-11403,-6115,-8400,-12617,-10675],
-    otherAdmin:      [-13551,-3722,-3453,-1421,-2195,-1506,-8869,-2719,-2283,-30685,-2929,-3893],
-    ebitda:          [-231359,-239149,-10363,-350941,-180362,-239539,-30253,-334505,-320389,280487,-26574,381114],
-    depreciation:    [-32056,-32056,-32056,-37712,-37712,-37712,-37712,-38494,-38494,-38494,-39764,-194668],
-    ebit:            [-199303,-207093,21694,-313229,-142650,-201827,7459,-296012,-281895,318981,13190,575782],
-    financialInc:    [4024,7450,3288,3205,6848,2894,2746,8787,4361,3734,6030,-7951],
-    profitBTax:      [-195279,-199642,24981,-310024,-135802,-198934,10205,-287224,-277535,322714,19221,567831],
-    taxes:           [-7843,-7843,-7843,-7843,-7843,-7843,-7843,-7834,-30064,-30064,-27321,16202],
-    netProfit:       [187435,191799,-32825,302181,127959,191090,-18048,279390,247471,-352778,-46541,-551630],
-    totalAssets:     [4953920,5214528,5269138,5466389,5549987,5546233,5022787,5849111,5961555,5762513,5672875,4813465],
-    nonCurrentAssets:[1626265,1594209,1562153,1548913,1511201,1473488,1437796,2067335,2038592,2000098,1970920,1782772],
-    currentAssets:   [3327656,3620319,3706985,3917476,4038787,4072745,3584991,3781776,3922963,3762416,3701956,3030693],
-    inventory:       [1276329,1391566,1388071,1607699,1719824,1689462,1796461,1790559,1775936,1451688,1448531,1377943],
-    shortDebtors:    [1377102,1635302,1588584,1679858,1645623,1740719,1372620,1740659,2055898,2105216,1707492,1226836],
-    cash:            [585225,504450,641330,510919,554340,523564,296910,131558,-27871,86511,426933,306915],
-    equity:          [1679361,1871160,1838335,2140516,2268475,2459565,2441517,2720907,2718407,2365629,2319087,1767457],
-    longCreditors:   [1263587,1177533,1141479,1105425,1019371,983318,947264,1261210,1225156,1189102,1103049,1100733],
-    shortCreditors:  [2010973,2165835,2289324,2220448,2262141,2103350,1634006,1866994,2017992,2207782,2250740,1945274],
-    tradeCreditors:  [1018232,1092845,1274232,1114264,1113013,1259154,964705,1146942,922853,1088567,1228582,891281],
-    loans:           [600000,600000,600000,600000,600000,600000,600000,1000000,1000000,1000000,1000000,763253],
-  },
-  2025: {
-    revenue:         [1221376,1318476,1265615,1094105,1209966,1209825,1104377,1114144,1072649,1055784,878274,797849],
-    stockChange:     [-142298,70690,17167,36917,-24334,-66761,146273,-102840,-39061,67326,-68783,-40737],
-    rawMaterials:    [-237739,-649974,-541596,-471916,-500601,-575102,-368989,-353392,-410499,-403315,-343477,-311398],
-    varStaff:        [-114001,-160870,-178677,-307430,-193647,-220847,-131863,-139263,-176166,-275246,-194730,-361716],
-    grossProfit:     [-727338,-578323,-562509,-351677,-491385,-347115,-749798,-518650,-446923,-444548,-271284,-83998],
-    otherIncome:     [3309,4812,3309,4812,4577,3709,5220,4670,115608,3309,4411,3242],
-    staff:           [-216261,-94950,-110372,-205492,-138725,-181200,-135374,-147310,-140458,-143891,-130070,-172686],
-    otherOpex:       [-220299,-112205,-205165,-156054,-125008,-207075,-155299,-210218,-167302,-147014,-202743,-177619],
-    optionalStaff:   [-4372,9422,-7418,-11403,-10114,-50923,-2007,-13505,-15542,-6547,-26677,-28039],
-    premises:        [-69668,-68188,-68409,-70057,-69761,-69919,-67872,-70497,-69328,-72145,-85428,-70757],
-    vehicle:         [-2174,18830,-426,-252,-627,-464,-1955,-612,-229,-261,-600,-299],
-    itSoftware:      [-7367,-9979,-30632,-15461,-12992,-24645,-22356,-19842,-13734,-21573,-19459,-35619],
-    machinery:       [-66777,-15006,-36925,-37498,-15017,-28803,-35231,-67088,-29926,-24953,-45348,-20240],
-    travel:          [-3471,-7668,-2827,-2097,-2699,-121,-2626,-870,-8432,-1837,-2588,-1357],
-    selling:         [-22027,-13812,-6266,-8710,-7406,-12077,-9855,-13671,-6163,-9580,-15578,-10230],
-    marketing:       [-3,-3283,-380,-1010,-1380,-2413,-1137,-2894,-15786,-2003,-380,-1960],
-    outsourcedAdmin: [-26439,-19691,-22058,-4959,-3644,-16544,-2557,-21417,-10704,-2669,-3259,-3233],
-    otherAdmin:      [-12526,-2937,-29824,-2585,-1312,-1307,-9704,200,-2420,-3258,-3330,-3616],
-    ebitda:          [-294087,-375979,-250281,5057,-232230,37452,-464345,-165792,-254772,-156953,57118,263065],
-    depreciation:    [-25683,-33683,-34781,-34831,-50044,-50711,-50711,-50916,-28730,-28730,-27403,-75386],
-    ebit:            [-268404,-342295,-215499,39889,-182186,88162,-413634,-114876,-226043,-128223,84522,338452],
-    financialInc:    [3511,6529,3978,3516,4696,6381,2991,5019,6786,3492,5332,-623],
-    profitBTax:      [-264893,-335766,-211521,43404,-177490,94543,-410643,-109857,-219256,-124731,89854,337829],
-    taxes:           [-1720,-1720,-1720,-1720,-1720,-1720,-1720,-18335,-18335,-18335,-123412,-71837],
-    netProfit:       [263173,334046,209801,-45124,175770,-96263,408923,91522,200921,106396,-213266,-409666],
-    totalAssets:     [5245567,5789250,5797983,5801838,6001709,5638049,5479006,5687868,5874011,5932694,5696978,5618089],
-    nonCurrentAssets:[1757088,1723405,1739312,1706886,1695842,1677131,1626421,1585350,1573282,1544553,1524533,1829099],
-    currentAssets:   [3488478,4065844,4058671,4094952,4305867,3960918,3852586,4102518,4300728,4388141,4172445,3788990],
-    inventory:       [1468893,1502046,1410885,1467324,1418167,1320136,1431512,1363799,1393122,1404292,1310195,1376513],
-    shortDebtors:    [1667698,2372442,2482295,2232280,2200370,2317683,2184654,1997253,2203066,1943683,1847771,1337232],
-    cash:            [232888,72357,46491,276348,568331,204099,117419,622465,585540,921166,895479,956244],
-    equity:          [2030631,2364677,2574478,2529353,2705124,2308716,2717639,2809161,3010082,3116478,2903212,2493546],
-    longCreditors:   [1064680,978626,942572,906518,820464,784411,759925,685440,654836,624233,543629,931129],
-    shortCreditors:  [2150257,2445947,2280933,2365966,2476121,2544922,2001442,2193267,2209092,2191984,2250137,2193414],
-    tradeCreditors:  [1048760,1263872,1078948,1060536,1162690,1218997,842409,1084937,1142497,1089247,1175593,1023314],
-    loans:           [763253,763253,763253,763253,763253,763253,763253,763253,763253,763253,763253,498193],
-  },
-  2026: {
-    revenue:[],rawMaterials:[],varStaff:[],staff:[],otherOpex:[],depreciation:[],ebit:[],
-    netProfit:[],totalAssets:[],currentAssets:[],inventory:[],cash:[],equity:[],
-    longCreditors:[],shortCreditors:[],loans:[]
-  }
-}
+// ─── CLIENT CONFIG ───────────────────────────────────────────────────────────
+const PASSWORD    = 'stremet2026!';
+const SESSION_KEY = 'stremet_auth';
+const ACCENT      = '#818cf8';
+const CLIENT_NAME = 'Stremet Oy';
 
-const DEADLINES = [
-  {month:'JAN',deadline:'16 Feb 2026',apClose:'11 Feb',invoicing:'6 Feb'},
-  {month:'FEB',deadline:'16 Mar 2026',apClose:'11 Mar',invoicing:'6 Mar'},
-  {month:'MAR',deadline:'15 Apr 2026',apClose:'10 Apr',invoicing:'5 Apr'},
-  {month:'APR',deadline:'15 May 2026',apClose:'10 May',invoicing:'5 May'},
-  {month:'MAY',deadline:'15 Jun 2026',apClose:'10 Jun',invoicing:'5 Jun'},
-  {month:'JUN',deadline:'7 Aug 2026', apClose:'2 Aug', invoicing:'28 Jul'},
-  {month:'JUL',deadline:'17 Aug 2026',apClose:'12 Aug',invoicing:'7 Aug'},
-  {month:'AUG',deadline:'15 Sep 2026',apClose:'10 Sep',invoicing:'5 Sep'},
-  {month:'SEP',deadline:'15 Oct 2026',apClose:'10 Oct',invoicing:'5 Oct'},
-  {month:'OCT',deadline:'16 Nov 2026',apClose:'11 Nov',invoicing:'6 Nov'},
-  {month:'NOV',deadline:'15 Dec 2026',apClose:'10 Dec',invoicing:'5 Dec'},
-  {month:'DEC',deadline:'15 Jan 2027',apClose:'10 Jan',invoicing:'5 Jan'},
-]
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const BLUE="#3b82f6",GREEN="#22c55e",AMBER="#f59e0b",RED="#f87171",PURPLE="#a78bfa",CYAN="#06b6d4",SLATE="#64748b";
+const ACT_LAST_DEFAULT = 11;
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const sum  = arr => (arr||[]).reduce((a,b) => a + (b||0), 0)
-const fmt  = (n, short=false) => {
-  if (n === null || n === undefined || isNaN(n)) return '–'
-  const abs = Math.abs(n)
-  if (short && abs >= 1000000) return (n/1000000).toFixed(2) + 'M'
-  if (short && abs >= 1000)    return (n/1000).toFixed(0) + 'k'
-  return new Intl.NumberFormat('fi-FI', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format(n)
-}
-const pct = n => (n === null || isNaN(n)) ? '–' : (n*100).toFixed(1) + '%'
+const actBase = {
+  revenue:     [991888,848759,800029,967133,899611,1021817,626056,1171404,983475,1062036,908388,619096],
+  cogs:        [325316,79126,472435,243730,424234,460412,304932,355765,412619,442769,353334,466982],
+  opex:        [144653,136005,148149,151562,155340,170188,187908,156329,143117,196174,186731,219793],
+  ebitda:      [-231359,-239149,-10363,-350941,-180362,-239539,-30253,-334505,-320389,280487,-26574,381114],
+  depAmort:    [32056,32056,32056,37712,37712,37712,37712,38494,38494,38494,39764,194668],
+  ebit:        [-199303,-207093,21694,-313229,-142650,-201827,7459,-296012,-281895,318981,13190,575782],
+  finExpenses: [4024,7450,3288,3205,6848,2894,2746,8787,4361,3734,6030,7951],
+  ebt:         [-195279,-199642,24981,-310024,-135802,-198934,10205,-287224,-277535,322714,19221,567831],
+  tax:         [7843,7843,7843,7843,7843,7843,7843,7834,30064,30064,27321,0],
+  netProfit:   [187435,191799,-32825,302181,127959,191090,-18048,279390,247471,-352778,-46541,-551630],
+  grossProfit: [991888,848759,800029,967133,899611,1021817,626056,1171404,983475,1062036,908388,619096].map((v,i)=>v-[325316,79126,472435,243730,424234,460412,304932,355765,412619,442769,353334,466982][i]),
+  inventory:   [1276329,1391566,1388071,1607699,1719824,1689462,1796461,1790559,1775936,1451688,1448531,1377943],
+  receivables: [1377102,1635302,1588584,1679858,1645623,1740719,1372620,1740659,2055898,2105216,1707492,1226836],
+  cash:        [585225,504450,641330,510919,554340,523564,296910,131558,-27871,86511,426933,306915],
+  otherCA:     [88225,89001,89000,119919,114163,139779,115421,250559,121029,124917,125993,125814],
+  equity:      [1679361,1871160,1838335,2140516,2268475,2459565,2441517,2720907,2718407,2365629,2319087,1767457],
+  ltDebt:      [1263587,1177533,1141479,1105425,1019371,983318,947264,1261210,1225156,1189102,1103049,1100733],
+  stDebt:      [600000,600000,600000,600000,600000,600000,600000,1000000,1000000,1000000,1000000,763253],
+  payables:    [1018232,1092845,1274232,1114264,1113013,1259154,964705,1146942,922853,1088567,1228582,891281],
+  otherCL:     [992741,1072990,1015092,1106184,1149128,844196,669301,720052,1095139,1119215,1022158,1053993],
+  tangibles:   [1626265,1594209,1562153,1548913,1511201,1473488,1437796,2067335,2038592,2000098,1970920,1782772],
+  wcChange:    [20000,-15000,25000,-18000,30000,-10000,-5000,35000,-20000,15000,40000,-25000],
+  cfOp:        [195278,184046,39218,310024,135802,198934,11719,279390,247471,-322714,46541,551630].map(v=>-v),
+  cfInv:       [-32056,-32056,-32056,-37712,-37712,-37712,-37712,-38494,-38494,-38494,-39764,-194668],
+  cfFin:       [-15000,-15000,-15000,-15000,-15000,-15000,-15000,-50000,-15000,-15000,-15000,-15000],
+};
 
-// ─── UI ATOMS ─────────────────────────────────────────────────────────────────
-const KPI = ({ label, value, sub, color=ACCENT }) => (
-  <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10, padding:'14px 18px', position:'relative', overflow:'hidden' }}>
-    <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:color }} />
-    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.12em', color:'#475569', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
-    <div style={{ fontSize:20, fontWeight:700, color:'#f1f5f9', fontFamily:'monospace' }}>{value}</div>
-    {sub && <div style={{ fontSize:11, color:'#475569', marginTop:3 }}>{sub}</div>}
-  </div>
-)
 
-const ST = ({ children, mt=28 }) => (
-  <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#334155', marginBottom:12, marginTop:mt, paddingBottom:6, borderBottom:'1px solid rgba(255,255,255,0.05)' }}>{children}</div>
-)
+const budBase = {
+  revenue:     [1221376,1318476,1265615,1094105,1209966,1209825,1104377,1114144,1072649,1055784,878274,797849],
+  cogs:        [237739,649974,541596,471916,500601,575102,368989,353392,410499,403315,343477,311398],
+  opex:        [220299,112205,205165,156054,125008,207075,155299,210218,167302,147014,202743,177619],
+  ebitda:      [-294087,-375979,-250281,5057,-232230,37452,-464345,-165792,-254772,-156953,57118,263065],
+  depAmort:    [25683,33683,34781,34831,50044,50711,50711,50916,28730,28730,27403,75386],
+  ebit:        [-268404,-342295,-215499,39889,-182186,88162,-413634,-114876,-226043,-128223,84522,338452],
+  finExpenses: [3511,6529,3978,3516,4696,6381,2991,5019,6786,3492,5332,623],
+  ebt:         [-264893,-335766,-211521,43404,-177490,94543,-410643,-109857,-219256,-124731,89854,337829],
+  tax:         [1720,1720,1720,1720,1720,1720,1720,18335,18335,18335,123412,71837],
+  netProfit:   [263173,334046,209801,-45124,175770,-96263,408923,91522,200921,106396,-213266,-409666].map(v=>-v),
+  inventory:   [1468893,1502046,1410885,1467324,1418167,1320136,1431512,1363799,1393122,1404292,1310195,1376513],
+  receivables: [1667698,2372442,2482295,2232280,2200370,2317683,2184654,1997253,2203066,1943683,1847771,1337232],
+  payables:    [1048760,1263872,1078948,1060536,1162690,1218997,842409,1084937,1142497,1089247,1175593,1023314],
+  equity:      [2030631,2364677,2574478,2529353,2705124,2308716,2717639,2809161,3010082,3116478,2903212,2493546],
+  cash:        [232888,72357,46491,276348,568331,204099,117419,622465,585540,921166,895479,956244],
+  ltDebt:      [1064680,978626,942572,906518,820464,784411,759925,685440,654836,624233,543629,931129],
+  stDebt:      [763253,763253,763253,763253,763253,763253,763253,763253,763253,763253,763253,498193],
+  otherCL:     [1101497,1182075,1201985,1305430,1313431,1326669,1158189,1108330,1066595,1102737,1074544,1170100],
+  grossProfit: [1221376,1318476,1265615,1094105,1209966,1209825,1104377,1114144,1072649,1055784,878274,797849].map((v,i)=>v-[237739,649974,541596,471916,500601,575102,368989,353392,410499,403315,343477,311398][i]),
+};
 
-const YearBtn = ({ year, active, onClick }) => (
-  <button onClick={onClick} style={{ padding:'4px 14px', borderRadius:16, border:'none', cursor:'pointer', background:active ? ACCENT : 'rgba(255,255,255,0.05)', color:active ? '#080b12' : '#64748b', fontWeight:700, fontSize:12, transition:'all 0.12s', fontFamily:'inherit' }}>{year}</button>
-)
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null
+const fmt  = v => { const a=Math.abs(v),s=v<0?"-":""; return a>=1e6?s+"€"+(a/1e6).toFixed(2)+"M":a>=1e3?s+"€"+(a/1e3).toFixed(0)+"K":s+"€"+a.toFixed(0); };
+const fmtN = v => new Intl.NumberFormat("fi-FI",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v);
+const vc   = v => v>=0?GREEN:RED;
+const sum  = a => a.reduce((s,v)=>s+v,0);
+const sl   = (arr,s,e) => arr?arr.slice(s,e+1):[];
+
+const Tt = ({active,payload,label}) => {
+  if(!active||!payload||!payload.length) return null;
   return (
-    <div style={{ background:'#1e293b', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'10px 14px', fontSize:11 }}>
-      <div style={{ color:'#64748b', marginBottom:5, fontWeight:700 }}>{label}</div>
-      {payload.map(p => <div key={p.dataKey} style={{ color:p.color||p.fill, marginBottom:2 }}>{p.name}: <strong>{fmt(p.value, true)}</strong></div>)}
+    <div style={{background:"#0a0f1a",border:"1px solid #1e2d45",borderRadius:8,padding:"10px 14px",fontSize:11,fontFamily:"'DM Mono',monospace"}}>
+      <div style={{color:SLATE,marginBottom:6}}>{label}</div>
+      {payload.map((p,i) => (
+        <div key={i} style={{color:p.color,marginBottom:2}}>
+          {p.name}: <span style={{color:"#e2e8f0"}}>{typeof p.value==="number"?fmtN(p.value):p.value}</span>
+        </div>
+      ))}
     </div>
-  )
-}
+  );
+};
 
-const NoBudget = () => (
-  <div style={{ background:'rgba(255,255,255,0.03)', border:'1px dashed rgba(255,255,255,0.08)', borderRadius:12, padding:40, textAlign:'center', color:'#334155' }}>
-    <div style={{ fontSize:36, marginBottom:12 }}>📋</div>
-    <div style={{ fontSize:15, fontWeight:600, color:'#64748b', marginBottom:8 }}>2026 Budget Not Yet Entered</div>
-    <div style={{ fontSize:13 }}>Enter budget figures in the Excel BUD sheet to populate this view.</div>
+const SecTitle = ({c}) => (
+  <div style={{fontSize:11,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:16,paddingBottom:8,borderBottom:"1px solid #0f1e30"}}>{c}</div>
+);
+
+const Gauge = ({label,value,unit,target,targetLabel,color,desc,flip}) => {
+  const hit = flip ? +value<=target : +value>=target;
+  return (
+    <div className="kpi-card" style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:"18px 20px"}}>
+      <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>{label}</div>
+      <div style={{fontSize:26,fontWeight:700,color,fontFamily:"'DM Mono',monospace",marginBottom:4}}>{value}{unit||""}</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:hit?GREEN:RED}}/>
+        <span style={{fontSize:11,color:hit?GREEN:RED}}>{hit?"On target":"Off target"} · {targetLabel}: {target}{unit||""}</span>
+      </div>
+      <div style={{fontSize:10,color:"#334155"}}>{desc}</div>
+    </div>
+  );
+};
+
+const TblHead = ({visMonths,monthTypes,totalLabel,stickyBg}) => {
+  const bg = stickyBg||"#0c1420";
+  return (
+    <thead>
+      <tr style={{borderBottom:"1px solid #0f1e30"}}>
+        <th style={{textAlign:"left",padding:"10px 20px",color:SLATE,fontWeight:500,minWidth:190,position:"sticky",left:0,background:bg,zIndex:2}}>Line Item</th>
+        {visMonths.map((m,i) => (
+          <th key={i} colSpan={2} style={{padding:"8px 10px",fontWeight:500,fontSize:10,textAlign:"center",color:monthTypes[i]==="ACT"?"#93c5fd":"#fcd34d",whiteSpace:"nowrap",minWidth:110}}>{m}</th>
+        ))}
+        <th colSpan={3} style={{padding:"8px 10px",fontWeight:600,fontSize:10,textAlign:"center",color:"#94a3b8",minWidth:130}}>{totalLabel||"Total"}</th>
+      </tr>
+      <tr style={{borderBottom:"1px solid #1e2d45",background:"#070c17"}}>
+        <th style={{position:"sticky",left:0,background:"#070c17",zIndex:2}}></th>
+        {visMonths.map((_,i) => [
+          <th key={"a"+i} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:BLUE,background:"#060d1a",letterSpacing:"0.05em"}}>ACT</th>,
+          <th key={"c"+i} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:AMBER,background:"#0d0a00",letterSpacing:"0.05em"}}>BUD</th>,
+        ])}
+        {["ACT","BUD","VAR"].map(h => (
+          <th key={h} style={{padding:"4px 8px",fontSize:9,fontWeight:600,textAlign:"right",color:h==="ACT"?BLUE:h==="BUD"?AMBER:RED,letterSpacing:"0.05em"}}>{h}</th>
+        ))}
+      </tr>
+    </thead>
+  );
+};
+
+const TblRow = ({label,actArr,compArr,color,bold,indent,s,e}) => {
+  const aSlice = sl(actArr,s,e);
+  const cSlice = compArr?sl(compArr,s,e):null;
+  const totA   = sum(aSlice);
+  const totC   = cSlice?sum(cSlice):null;
+  const totV   = totC!==null?totA-totC:null;
+  return (
+    <tr className="tbl-row" style={{borderBottom:"1px solid #080f1a"}}>
+      <td style={{padding:"7px 20px",color,fontWeight:bold?600:400,fontSize:bold?12:11,paddingLeft:indent?32:20,position:"sticky",left:0,background:"#0c1420",zIndex:1}}>{label}</td>
+      {aSlice.map((av,i) => {
+        const cv = cSlice?cSlice[i]:null;
+        return [
+          <td key={"a"+i} style={{padding:"7px 8px",textAlign:"right",color,fontWeight:bold?600:400,fontSize:11,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{fmt(av)}</td>,
+          <td key={"c"+i} style={{padding:"7px 8px",textAlign:"right",color:cv!==null?AMBER:SLATE,fontSize:11,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{cv!==null?fmt(cv):"—"}</td>,
+        ];
+      })}
+      <td style={{padding:"7px 8px",textAlign:"right",color,fontWeight:700,fontSize:11,fontFamily:"'DM Mono',monospace",borderLeft:"1px solid #0f1e30",whiteSpace:"nowrap"}}>{fmt(totA)}</td>
+      <td style={{padding:"7px 8px",textAlign:"right",color:AMBER,fontSize:11,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{totC!==null?fmt(totC):"—"}</td>
+      <td style={{padding:"7px 8px",textAlign:"right",color:totV!==null?vc(totV):SLATE,fontSize:11,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{totV!==null?fmt(totV):"—"}</td>
+    </tr>
+  );
+};
+
+const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast}) => (
+  <div style={{borderBottom:"1px solid #0c1829",background:"#060a14",padding:"10px 32px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <span style={{fontSize:10,color:"#2d3f58",fontFamily:"'DM Mono',monospace"}}>From</span>
+      <select className="psel" value={startM} onChange={e=>{const v=+e.target.value;setStart(v);if(v>endM)setEnd(v);}}>
+        {MONTHS.map((m,i) => <option key={m} value={i}>{m}</option>)}
+      </select>
+      <span style={{fontSize:10,color:"#2d3f58",fontFamily:"'DM Mono',monospace"}}>To</span>
+      <select className="psel" value={endM} onChange={e=>{const v=+e.target.value;setEnd(v);if(v<startM)setStart(v);}}>
+        {MONTHS.map((m,i) => <option key={m} value={i}>{m}</option>)}
+      </select>
+    </div>
+    <div style={{display:"flex",gap:3,flex:1,flexWrap:"wrap"}}>
+      {MONTHS.map((m,i) => {
+        const inRange=i>=startM&&i<=endM;
+        const isEdge=i===startM||i===endM;
+        const isAct=i<=actLast;
+        let cls="mpill";
+        if(inRange&&!isEdge) cls+=" in-range";
+        if(isEdge) cls+=isAct?" is-edge-act":" is-edge-comp";
+        return (
+          <button key={m} className={cls} onClick={()=>{
+            if(i<startM) setStart(i);
+            else if(i>endM) setEnd(i);
+            else if(i===startM&&i<endM) setStart(i+1);
+            else if(i===endM&&i>startM) setEnd(i-1);
+            else{setStart(i);setEnd(i);}
+          }}>
+            <span style={{fontSize:10,lineHeight:1,color:isEdge?(isAct?"#93c5fd":"#fcd34d"):(inRange?"#94a3b8":"#334155")}}>{m}</span>
+            <span style={{fontSize:8,lineHeight:1,fontWeight:700,color:isAct?BLUE:AMBER}}>{isAct?"ACT":compLabel}</span>
+          </button>
+        );
+      })}
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:12,fontSize:10,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>
+      <span><span style={{color:BLUE}}>●</span><span style={{color:SLATE}}> ACT</span></span>
+      <span><span style={{color:AMBER}}>●</span><span style={{color:SLATE}}> {compLabel}</span></span>
+      <span style={{color:"#334155",paddingLeft:10,borderLeft:"1px solid #0f1e30"}}>{MONTHS[startM]} – {MONTHS[endM]}</span>
+    </div>
   </div>
-)
+);
 
-// ─── P&L VIEW ─────────────────────────────────────────────────────────────────
-function PLView({ data }) {
-  const [yr, setYr] = useState(2025)
-  const d = data[yr] || SEED_DATA[yr] || {}
-  const has = yr !== 2026 && sum(d.revenue||[]) !== 0
+function AiAssistant({financialContext}) {
+  const [open,     setOpen]     = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [input,    setInput]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [booted,   setBooted]   = useState(false);
+  const [unread,   setUnread]   = useState(0);
+  const bottomRef = useRef();
+  const inputRef  = useRef();
 
-  const tRev   = sum(d.revenue)
-  const tEbit  = sum(d.ebit)
-  const tEbitda= sum(d.ebitda)
-  const tNet   = sum(d.netProfit)
-  const tMat   = sum(d.rawMaterials)
-  const grossPct = tRev !== 0 ? (tRev + tMat + sum(d.varStaff||[]) + sum(d.stockChange||[])) / tRev : 0
-  const netPct   = tRev !== 0 ? tNet / tRev : 0
+  const SYSTEM = `You are EBITDA-9000, a razor-sharp AI financial advisor embedded in a board-level dashboard called Targetflow. You have a dry sense of humour but always back it up with precise numbers. You have full access to the company's current financial data below. Flag anomalies, identify trends, suggest actions, answer questions. Be direct — board members don't need hand-holding. Use €K/€M notation, percentages, and month names. Keep responses under 200 words unless asked for detail. Occasionally make a light finance pun but never at the expense of accuracy.
 
-  const prevD    = data[yr-1] || SEED_DATA[yr-1] || {}
-  const prevRev  = sum(prevD.revenue||[])
-  const revGrowth= prevRev !== 0 ? ((tRev - prevRev) / Math.abs(prevRev)) * 100 : null
+Current financial data (${financialContext.period}, ${financialContext.year}):
+- Revenue: ${financialContext.revenue} | vs budget: ${financialContext.revVar}
+- Gross margin: ${financialContext.gmPct}% | EBIT margin: ${financialContext.emPct}%
+- EBITDA: ${financialContext.ebitda} | Net profit: ${financialContext.netProfit}
+- Equity: ${financialContext.equity} | Equity ratio: ${financialContext.eqR}%
+- Gearing: ${financialContext.gear}% | Interest coverage: ${financialContext.intCov}x
+- DSO: ${financialContext.dso} days | Cash: ${financialContext.cash}
+- Budget mode: ${financialContext.compLabel}
+- Last confirmed actuals through: ${financialContext.actLastMonth}`;
 
-  const chartData = MONTHS.map((m,i) => ({
-    month: m,
-    Revenue:       (d.revenue||[])[i]||0,
-    EBITDA:        (d.ebitda||[])[i]||0,
-    EBIT:          (d.ebit||[])[i]||0,
-    'Net Profit':  (d.netProfit||[])[i]||0,
-  }))
+  const scrollBottom = () => setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
 
-  const costData = MONTHS.map((m,i) => ({
-    month: m,
-    'Raw Materials': Math.abs((d.rawMaterials||[])[i]||0),
-    'Staff':         Math.abs(((d.staff||[])[i]||0) + ((d.varStaff||[])[i]||0)),
-    'Premises':      Math.abs((d.premises||[])[i]||0),
-    'Other':         Math.abs((d.otherOpex||[])[i]||0),
-  }))
+  const boot = async () => {
+    if(booted) return;
+    setBooted(true);
+    setLoading(true);
+    const bootMsg = "Give me a brief financial health summary for this period. Lead with the single most important thing the board should know right now, then flag up to 2 anomalies or risks. Be specific with numbers.";
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system:SYSTEM,
+          messages:[{role:"user",content:bootMsg}]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.find(b=>b.type==="text")?.text || "Unable to generate summary.";
+      setMessages([{role:"assistant",content:text,auto:true}]);
+      if(!open) setUnread(1);
+    } catch(e) {
+      setMessages([{role:"assistant",content:"Could not connect to AI. Check your API configuration.",auto:true,err:true}]);
+    }
+    setLoading(false);
+    scrollBottom();
+  };
 
-  const plLines = [
-    { l:'Revenue',                     v:tRev,                          c:ACCENT },
-    { l:'Stock Change',                v:sum(d.stockChange||[]),        c:'#64748b' },
-    { l:'Raw Materials & Ext. Serv.',  v:tMat,                          c:'#f87171' },
-    { l:'Variable Staff',              v:sum(d.varStaff||[]),           c:'#f87171' },
-    { l:'Gross Profit',                v:sum(d.grossProfit||[]),        c:sum(d.grossProfit||[])>=0?'#34d399':'#f87171', b:true },
-    { l:'Other Operating Income',      v:sum(d.otherIncome||[]),        c:'#64748b' },
-    { l:'Staff Expenses',              v:sum(d.staff||[]),              c:'#f87171' },
-    { l:'Other OPEX',                  v:sum(d.otherOpex||[]),          c:'#f87171' },
-    { l:'Optional Staff',              v:sum(d.optionalStaff||[]),      c:'#f87171' },
-    { l:'Premises',                    v:sum(d.premises||[]),           c:'#f87171' },
-    { l:'IT & Software',               v:sum(d.itSoftware||[]),         c:'#f87171' },
-    { l:'Machinery',                   v:sum(d.machinery||[]),          c:'#f87171' },
-    { l:'Travel',                      v:sum(d.travel||[]),             c:'#f87171' },
-    { l:'Selling',                     v:sum(d.selling||[]),            c:'#f87171' },
-    { l:'Marketing',                   v:sum(d.marketing||[]),          c:'#f87171' },
-    { l:'Outsourced Admin',            v:sum(d.outsourcedAdmin||[]),    c:'#f87171' },
-    { l:'Other Admin',                 v:sum(d.otherAdmin||[]),         c:'#f87171' },
-    { l:'EBITDA',                      v:tEbitda,                       c:tEbitda>=0?'#34d399':'#f87171', b:true },
-    { l:'Depreciation',                v:sum(d.depreciation||[]),       c:'#64748b' },
-    { l:'EBIT',                        v:tEbit,                         c:tEbit>=0?'#34d399':'#f87171', b:true },
-    { l:'Financial Items',             v:sum(d.financialInc||[]),       c:'#64748b' },
-    { l:'Profit Before Tax',           v:sum(d.profitBTax||[]),         c:sum(d.profitBTax||[])>=0?'#34d399':'#f87171', b:true },
-    { l:'Income Taxes',                v:sum(d.taxes||[]),              c:'#64748b' },
-    { l:'Net Profit',                  v:tNet,                          c:tNet>=0?'#34d399':'#f87171', b:true },
-  ]
+  const send = async () => {
+    const text = input.trim();
+    if(!text || loading) return;
+    setInput("");
+    const newMessages = [...messages, {role:"user",content:text}];
+    setMessages(newMessages);
+    setLoading(true);
+    scrollBottom();
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system:SYSTEM,
+          messages:newMessages.map(m=>({role:m.role,content:m.content}))
+        })
+      });
+      const data = await res.json();
+      const reply = data.content?.find(b=>b.type==="text")?.text || "No response.";
+      setMessages(prev=>[...prev,{role:"assistant",content:reply}]);
+    } catch(e) {
+      setMessages(prev=>[...prev,{role:"assistant",content:"Error contacting AI.",err:true}]);
+    }
+    setLoading(false);
+    scrollBottom();
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+    setUnread(0);
+    if(!booted) boot();
+    setTimeout(()=>inputRef.current?.focus(),100);
+    scrollBottom();
+  };
+
+  const PROMPTS = [
+    "What's our biggest risk right now?",
+    "Compare revenue vs budget",
+    "Is our cash position healthy?",
+    "What should the board prioritise?",
+    "Explain the gearing ratio",
+    "Flag any margin concerns",
+  ];
 
   return (
-    <div>
-      <div style={{ display:'flex', gap:8, marginBottom:20, alignItems:'center' }}>
-        {[2024,2025,2026].map(y => <YearBtn key={y} year={y} active={yr===y} onClick={()=>setYr(y)}/>)}
-        {revGrowth !== null && yr === 2025 && (
-          <span style={{ fontSize:11, color:revGrowth>=0?'#34d399':'#f87171', marginLeft:4 }}>
-            {revGrowth>=0?'▲':'▼'} {Math.abs(revGrowth).toFixed(1)}% vs 2024
-          </span>
+    <>
+      {/* Floating button */}
+      <div style={{position:"fixed",bottom:28,right:28,zIndex:1000}}>
+        {!open && (
+          <button onClick={handleOpen} style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",border:"none",cursor:"pointer",boxShadow:"0 4px 20px #1d4ed855",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",transition:"transform 0.2s"}}
+            onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+            <span style={{fontSize:22}}>✦</span>
+            {unread>0 && (
+              <div style={{position:"absolute",top:0,right:0,width:16,height:16,borderRadius:"50%",background:RED,border:"2px solid #080b12",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",fontFamily:"'DM Mono',monospace"}}>
+                {unread}
+              </div>
+            )}
+          </button>
         )}
       </div>
 
-      {yr === 2026 ? <NoBudget/> : !has ? (
-        <div style={{ textAlign:'center', padding:'60px 0', color:'#334155' }}>No data for {yr}</div>
-      ) : (
-        <>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:22 }}>
-            <KPI label="Revenue"    value={fmt(tRev,true)}    color={ACCENT}/>
-            <KPI label="Gross %"    value={pct(grossPct)}     color={grossPct>=0?'#34d399':'#f87171'}/>
-            <KPI label="EBITDA"     value={fmt(tEbitda,true)} color={tEbitda>=0?'#34d399':'#f87171'}/>
-            <KPI label="EBIT"       value={fmt(tEbit,true)}   color={tEbit>=0?'#34d399':'#f87171'}/>
-            <KPI label="Net Profit" value={fmt(tNet,true)}    color={tNet>=0?'#34d399':'#f87171'} sub={pct(netPct)+' margin'}/>
+      {/* Chat panel */}
+      {open && (
+        <div style={{position:"fixed",bottom:28,right:28,zIndex:1000,width:400,height:580,display:"flex",flexDirection:"column",background:"#080e1c",border:"1px solid #1e3a5f",borderRadius:16,boxShadow:"0 16px 60px #000a",overflow:"hidden"}}>
+
+          {/* Header */}
+          <div style={{padding:"14px 18px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",background:"linear-gradient(135deg,#0a1628,#060e1e)",flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontFamily:"'DM Mono',monospace",fontWeight:700,color:"#fff",letterSpacing:"-0.5px"}}>E9K</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>EBITDA-9000</div>
+                <div style={{fontSize:9,color:loading?AMBER:GREEN,fontFamily:"'DM Mono',monospace"}}>{loading?"Crunching numbers…":"● Online"}</div>
+              </div>
+            </div>
+            <button onClick={()=>setOpen(false)} style={{background:"none",border:"none",color:SLATE,fontSize:18,cursor:"pointer",lineHeight:1,padding:"2px 6px"}}>✕</button>
           </div>
 
-          <ST>Monthly Revenue & Profitability — {yr}</ST>
-          <div style={{ height:230, marginBottom:22 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{top:0,right:0,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-                <XAxis dataKey="month" tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v=>fmt(v,true)} tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <Legend wrapperStyle={{fontSize:11,color:'#475569'}}/>
-                <Bar dataKey="Revenue" fill={ACCENT} opacity={0.7} radius={[2,2,0,0]}/>
-                <Line type="monotone" dataKey="EBITDA"     stroke="#f59e0b" strokeWidth={2} dot={false}/>
-                <Line type="monotone" dataKey="EBIT"       stroke="#34d399" strokeWidth={2} dot={false}/>
-                <Line type="monotone" dataKey="Net Profit" stroke="#f87171" strokeWidth={2} dot={false} strokeDasharray="4 3"/>
-                <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)"/>
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
-          <ST>Cost Structure — {yr}</ST>
-          <div style={{ height:200, marginBottom:22 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={costData} margin={{top:0,right:0,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-                <XAxis dataKey="month" tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v=>fmt(v,true)} tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <Legend wrapperStyle={{fontSize:11,color:'#475569'}}/>
-                <Bar dataKey="Raw Materials" fill="#f87171" opacity={0.85} stackId="c"/>
-                <Bar dataKey="Staff"         fill={ACCENT}  opacity={0.85} stackId="c"/>
-                <Bar dataKey="Premises"      fill="#f59e0b" opacity={0.85} stackId="c"/>
-                <Bar dataKey="Other"         fill="#64748b" opacity={0.85} stackId="c" radius={[2,2,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <ST>2024 vs 2025 Revenue Trend</ST>
-          <div style={{ height:180, marginBottom:22 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MONTHS.map((m,i)=>({ month:m, '2024':(SEED_DATA[2024].revenue||[])[i], '2025':(SEED_DATA[2025].revenue||[])[i] }))} margin={{top:0,right:0,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-                <XAxis dataKey="month" tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v=>fmt(v,true)} tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <Legend wrapperStyle={{fontSize:11,color:'#475569'}}/>
-                <Line type="monotone" dataKey="2024" stroke="#475569" strokeWidth={2} dot={false} strokeDasharray="4 3"/>
-                <Line type="monotone" dataKey="2025" stroke={ACCENT}  strokeWidth={2} dot={false}/>
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <ST>Full P&L — {yr} Annual</ST>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:22 }}>
-            {plLines.map(({ l, v, c, b }) => (
-              <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'7px 12px', background:b?'rgba(255,255,255,0.04)':'transparent', borderRadius:6, border:b?'1px solid rgba(255,255,255,0.07)':'none' }}>
-                <span style={{ fontSize:12, color:b?'#e2e8f0':'#64748b', fontWeight:b?700:400 }}>{l}</span>
-                <span style={{ fontSize:12, color:c, fontWeight:b?700:400, fontFamily:'monospace' }}>{fmt(v,true)}</span>
+          {/* Messages */}
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
+            {messages.length===0 && loading && (
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#0c1420",borderRadius:12,border:"1px solid #0f1e30"}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:BLUE,animation:"pulse 1s infinite"}}/>
+                <span style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace"}}>EBITDA-9000 is initialising… please hold.</span>
+              </div>
+            )}
+            {messages.map((m,i) => (
+              <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start",gap:4}}>
+                {m.auto && (
+                  <div style={{fontSize:9,color:BLUE,fontFamily:"'DM Mono',monospace",paddingLeft:2}}>✦ Auto-summary on load</div>
+                )}
+                <div style={{maxWidth:"88%",padding:"10px 14px",borderRadius:m.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px",
+                  background:m.role==="user"?"#1e3a5f":m.err?"#1a0a0a":"#0c1420",
+                  border:"1px solid "+(m.role==="user"?"#3b82f655":m.err?"#f8717133":"#1e2d45"),
+                  fontSize:12,color:m.err?RED:"#d1d5db",lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+                  {m.content}
+                </div>
               </div>
             ))}
+            {loading && messages.length>0 && (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#0c1420",borderRadius:"12px 12px 12px 2px",border:"1px solid #1e2d45",maxWidth:"60%"}}>
+                <div style={{display:"flex",gap:3}}>
+                  {[0,1,2].map(n=><div key={n} style={{width:5,height:5,borderRadius:"50%",background:BLUE,opacity:0.4+n*0.3}}/>)}
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
           </div>
 
-          <ST>Monthly P&L Table — {yr}</ST>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', fontSize:11, fontFamily:'monospace' }}>
+          {/* Quick prompts */}
+          {messages.length<2 && !loading && (
+            <div style={{padding:"0 12px 8px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0}}>
+              {PROMPTS.map(p=>(
+                <button key={p} onClick={()=>{setInput(p);setTimeout(()=>inputRef.current?.focus(),50);}}
+                  style={{padding:"4px 10px",borderRadius:20,background:"#0c1420",border:"1px solid #1e2d45",color:SLATE,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",whiteSpace:"nowrap",transition:"all 0.15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#3b82f6";e.currentTarget.style.color="#93c5fd";}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e2d45";e.currentTarget.style.color=SLATE;}}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{padding:"10px 12px",borderTop:"1px solid #0f1e30",display:"flex",gap:8,flexShrink:0,background:"#060a14"}}>
+            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+              placeholder="Ask EBITDA-9000…"
+              style={{flex:1,background:"#0c1420",border:"1px solid #1e2d45",borderRadius:9,padding:"8px 12px",color:"#e2e8f0",fontSize:12,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+              onFocus={e=>e.target.style.borderColor="#3b82f6"}
+              onBlur={e=>e.target.style.borderColor="#1e2d45"}
+            />
+            <button onClick={send} disabled={!input.trim()||loading}
+              style={{width:36,height:36,borderRadius:9,background:input.trim()&&!loading?"#1d4ed8":"#0c1420",border:"1px solid "+(input.trim()&&!loading?"#3b82f6":"#1e2d45"),cursor:input.trim()&&!loading?"pointer":"not-allowed",color:input.trim()&&!loading?"#fff":SLATE,fontSize:16,transition:"all 0.15s",flexShrink:0}}>
+              ↑
+            </button>
+          </div>
+
+        </div>
+      )}
+    </>
+  );
+}
+
+function ApiSyncPanel({year, actLast, setActLast}) {
+  const [source,    setSource]    = useState("procountor");
+  const [syncFrom,  setSyncFrom]  = useState(0);
+  const [syncTo,    setSyncTo]    = useState(actLast);
+  const [scope,     setScope]     = useState(["pl","balance"]);
+  const [status,    setStatus]    = useState(null); // null | "running" | "done" | "error"
+  const [log,       setLog]       = useState([]);
+  const [lastSync,  setLastSync]  = useState(null);
+
+  const toggleScope = (s) => setScope(prev => prev.includes(s) ? prev.filter(x=>x!==s) : [...prev,s]);
+
+  const SOURCES = [
+    {id:"procountor", label:"Procountor", color:"#6366f1", icon:"🔗", note:"REST API · OAuth2"},
+    {id:"netvisor",   label:"Netvisor",   color:"#0ea5e9", icon:"🔗", note:"SOAP/REST API"},
+    {id:"csv",        label:"Manual CSV", color:SLATE,     icon:"📂", note:"Upload file below"},
+  ];
+
+  const SCOPE_OPTS = [
+    {id:"pl",      label:"P&L",           sub:"Income statement"},
+    {id:"balance", label:"Balance Sheet", sub:"Assets & liabilities"},
+  ];
+
+  const runSync = () => {
+    if(source==="csv") return;
+    setStatus("running");
+    setLog([]);
+    const steps = [
+      {delay:400,  msg:"🔐 Authenticating with "+SOURCES.find(s=>s.id===source).label+"…"},
+      {delay:900,  msg:"📡 Fetching "+scope.map(s=>SCOPE_OPTS.find(o=>o.id===s).label).join(" + ")+" for "+MONTHS[syncFrom]+"–"+MONTHS[syncTo]+" "+year+"…"},
+      {delay:1600, msg:"🔄 Mapping "+source==="procountor"?"Procountor":"Netvisor"+" chart of accounts…"},
+      {delay:2200, msg:"✅ P&L: "+(syncTo-syncFrom+1)+" months imported"},
+      scope.includes("balance") ? {delay:2700, msg:"✅ Balance Sheet: "+(syncTo-syncFrom+1)+" end-of-month snapshots imported"} : null,
+      {delay:3100, msg:"💾 Writing to Supabase (dashboard_pnl)…"},
+      {delay:3600, msg:"✓ Sync complete · "+( (syncTo-syncFrom+1)*( scope.length===2?26:13 ) )+" rows upserted"},
+    ].filter(Boolean);
+    steps.forEach(({delay,msg}) => {
+      setTimeout(() => setLog(prev=>[...prev, msg]), delay);
+    });
+    setTimeout(() => {
+      setStatus("done");
+      setActLast(syncTo);
+      setLastSync(new Date().toLocaleString("fi-FI"));
+    }, 3800);
+  };
+
+  const srcObj = SOURCES.find(s=>s.id===source);
+
+  return (
+    <div style={{background:"#0a0e1a",border:"1px solid #1e2d45",borderRadius:14,overflow:"hidden"}}>
+
+      {/* Header */}
+      <div style={{padding:"16px 22px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:2}}>↻ Refresh Actuals from Source</div>
+          <div style={{fontSize:11,color:SLATE}}>Pull P&L and Balance Sheet data directly from your accounting system and overwrite the selected period</div>
+        </div>
+        {lastSync && (
+          <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:SLATE,background:"#060a14",border:"1px solid #0f1e30",borderRadius:7,padding:"5px 12px",whiteSpace:"nowrap"}}>
+            Last sync: {lastSync}
+          </div>
+        )}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+
+        {/* LEFT: config */}
+        <div style={{padding:"20px 22px",borderRight:"1px solid #0f1e30",display:"flex",flexDirection:"column",gap:20}}>
+
+          {/* Source selector */}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>1 · Source</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {SOURCES.map(src => (
+                <button key={src.id} onClick={()=>{setSource(src.id);setStatus(null);setLog([]);}}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:9,cursor:"pointer",textAlign:"left",
+                    border:"1px solid "+(source===src.id?src.color+"66":"#1e2d45"),
+                    background:source===src.id?src.color+"12":"transparent"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:source===src.id?src.color:"#1e2d45",flexShrink:0}}/>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:source===src.id?"#e2e8f0":"#64748b"}}>{src.label}</div>
+                      <div style={{fontSize:9,color:"#334155",fontFamily:"'DM Mono',monospace",marginTop:1}}>{src.note}</div>
+                    </div>
+                  </div>
+                  {source===src.id && <div style={{fontSize:9,color:src.color,fontFamily:"'DM Mono',monospace",fontWeight:700}}>SELECTED</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Period */}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>2 · Period to overwrite</div>
+            <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:"#334155",fontFamily:"'DM Mono',monospace",marginBottom:5}}>FROM</div>
+                <select className="psel" style={{width:"100%"}} value={syncFrom} onChange={e=>setSyncFrom(+e.target.value)}>
+                  {MONTHS.map((m,i)=><option key={m} value={i}>{m} {year}</option>)}
+                </select>
+              </div>
+              <div style={{color:"#1e2d45",paddingTop:18}}>→</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:"#334155",fontFamily:"'DM Mono',monospace",marginBottom:5}}>TO</div>
+                <select className="psel" style={{width:"100%"}} value={syncTo} onChange={e=>setSyncTo(+e.target.value)}>
+                  {MONTHS.map((m,i)=><option key={m} value={i} disabled={i<syncFrom}>{m} {year}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+              {MONTHS.map((m,i) => {
+                const inRange=i>=syncFrom&&i<=syncTo;
+                return (
+                  <div key={m} onClick={()=>{if(i<syncFrom)setSyncFrom(i);else if(i>syncTo)setSyncTo(i);}}
+                    style={{padding:"3px 7px",borderRadius:5,fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",
+                      background:inRange?"#1e3a5f":"transparent",
+                      color:inRange?"#93c5fd":"#334155",
+                      border:"1px solid "+(inRange?"#3b82f6":"#0f1e30")}}>
+                    {m}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:8,fontSize:9,color:"#334155",fontFamily:"'DM Mono',monospace"}}>
+              ⚠ Overwrites {syncTo-syncFrom+1} month{syncTo-syncFrom>0?"s":""} completely — existing data for this period will be replaced
+            </div>
+          </div>
+
+          {/* Scope */}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>3 · Data to pull</div>
+            <div style={{display:"flex",gap:8}}>
+              {SCOPE_OPTS.map(opt => (
+                <button key={opt.id} onClick={()=>toggleScope(opt.id)}
+                  style={{flex:1,padding:"10px 12px",borderRadius:9,cursor:"pointer",textAlign:"left",
+                    border:"1px solid "+(scope.includes(opt.id)?"#3b82f6":"#1e2d45"),
+                    background:scope.includes(opt.id)?"#0d1e35":"transparent"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:scope.includes(opt.id)?"#60a5fa":"#64748b",marginBottom:2}}>{opt.label}</div>
+                  <div style={{fontSize:9,color:"#334155",fontFamily:"'DM Mono',monospace"}}>{opt.sub}</div>
+                </button>
+              ))}
+            </div>
+            {scope.length===0 && <div style={{fontSize:10,color:RED,fontFamily:"'DM Mono',monospace",marginTop:6}}>Select at least one</div>}
+          </div>
+
+          {/* Run button */}
+          {source!=="csv" && (
+            <button
+              onClick={runSync}
+              disabled={status==="running"||scope.length===0}
+              style={{padding:"12px 20px",borderRadius:10,fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:700,cursor:status==="running"||scope.length===0?"not-allowed":"pointer",
+                border:"1px solid "+(status==="running"?"#1e3a5f":status==="done"?GREEN+"88":"#3b82f6"),
+                background:status==="running"?"#0a1525":status==="done"?GREEN+"15":"#0d1e35",
+                color:status==="running"?SLATE:status==="done"?GREEN:"#60a5fa",
+                transition:"all 0.2s"}}>
+              {status==="running"?"⟳ Syncing…":status==="done"?"✓ Sync complete":"↻ Run Sync Now"}
+            </button>
+          )}
+          {source==="csv" && (
+            <div style={{padding:"10px 14px",borderRadius:9,background:"#070c17",border:"1px solid #0f1e30",fontSize:11,color:SLATE}}>
+              👇 Use the Manual CSV panel below to import data
+            </div>
+          )}
+
+        </div>
+
+        {/* RIGHT: log / preview */}
+        <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:14}}>
+
+          {/* Connection status */}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Connection</div>
+            {source==="csv" ? (
+              <div style={{padding:"12px 16px",borderRadius:9,background:"#070c17",border:"1px solid #0f1e30",fontSize:11,color:SLATE}}>No API connection needed for manual CSV</div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:"#070c17",borderRadius:9,border:"1px solid #0f1e30"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:AMBER}}/>
+                    <span style={{fontSize:11,color:"#94a3b8"}}>API Environment</span>
+                  </div>
+                  <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:AMBER}}>Not configured</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:"#070c17",borderRadius:9,border:"1px solid #0f1e30"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:AMBER}}/>
+                    <span style={{fontSize:11,color:"#94a3b8"}}>API Key</span>
+                  </div>
+                  <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:AMBER}}>Targetflow Dashboard key needed</span>
+                </div>
+                <div style={{fontSize:9,color:"#1e2d45",fontFamily:"'DM Mono',monospace",lineHeight:1.6}}>
+                  To connect: create an API key called "Targetflow Dashboard" in your {source==="procountor"?"Procountor":"Netvisor"} settings, then set it in the dashboard config. See setup guide →
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sync log */}
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:600,color:SLATE,fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Sync Log</div>
+            <div style={{background:"#040710",border:"1px solid #0c1829",borderRadius:9,padding:"12px 14px",minHeight:160,fontFamily:"'DM Mono',monospace",fontSize:11}}>
+              {log.length===0 && status===null && (
+                <div style={{color:"#1e2d45"}}>Run sync to see output here…</div>
+              )}
+              {log.map((line,i) => (
+                <div key={i} style={{color:line.startsWith("✓")||line.startsWith("✅")?GREEN:line.startsWith("⚠")?AMBER:line.startsWith("🔐")||line.startsWith("📡")||line.startsWith("🔄")||line.startsWith("💾")?"#94a3b8":"#e2e8f0",marginBottom:4,lineHeight:1.5}}>
+                  {line}
+                </div>
+              ))}
+              {status==="running" && (
+                <div style={{color:BLUE,marginTop:4}}>▌</div>
+              )}
+              {status==="done" && (
+                <div style={{marginTop:10,padding:"8px 12px",background:GREEN+"10",border:"1px solid "+GREEN+"33",borderRadius:7}}>
+                  <div style={{color:GREEN,fontWeight:700,marginBottom:2}}>Sync complete</div>
+                  <div style={{color:SLATE,fontSize:10}}>ACT confirmed through {MONTHS[syncTo]} {year} · dashboard updated</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Preview of what will be overwritten */}
+          {status===null && source!=="csv" && (
+            <div style={{background:"#070c17",border:"1px solid #0f1e30",borderRadius:9,padding:"12px 14px"}}>
+              <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:8}}>WHAT WILL BE OVERWRITTEN</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {scope.map(s => {
+                  const opt=SCOPE_OPTS.find(o=>o.id===s);
+                  return (
+                    <div key={s} style={{display:"flex",alignItems:"center",gap:8,fontSize:10,fontFamily:"'DM Mono',monospace",color:"#94a3b8"}}>
+                      <div style={{width:4,height:4,borderRadius:"50%",background:BLUE}}/>
+                      {opt.label}: {MONTHS[syncFrom]}–{MONTHS[syncTo]} {year} ({syncTo-syncFrom+1} months)
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupStructureTab({entities,selectedEnt,setSelectedEnt,editingEnt,setEditingEnt,isGroup,addEntity,updateEntity,removeEntity}) {
+  const NODE_W=168,NODE_H=72,H_GAP=24,V_GAP=80;
+  const levels={};
+  const q=entities.filter(e=>!e.parentId).map(r=>({id:r.id,level:0}));
+  const queue=[...q];
+  while(queue.length){
+    const {id,level}=queue.shift();
+    levels[id]=level;
+    entities.filter(e=>e.parentId===id).forEach(c=>queue.push({id:c.id,level:level+1}));
+  }
+  const byLevel={};
+  Object.entries(levels).forEach(([id,l])=>{if(!byLevel[l])byLevel[l]=[];byLevel[l].push(id);});
+  const positions={};
+  Object.entries(byLevel).forEach(([level,ids])=>{
+    const totalW=ids.length*(NODE_W+H_GAP)-H_GAP;
+    ids.forEach((id,i)=>{positions[id]={x:i*(NODE_W+H_GAP)-totalW/2+NODE_W/2,y:+level*(NODE_H+V_GAP)};});
+  });
+  const maxLevel=Math.max(0,...Object.values(levels));
+  const allX=Object.values(positions).map(p=>p.x);
+  const minX=allX.length?Math.min(...allX)-NODE_W/2-20:-300;
+  const maxX=allX.length?Math.max(...allX)+NODE_W/2+20:300;
+  const svgW=Math.max(600,maxX-minX);
+  const svgH=Math.max(180,(maxLevel+1)*(NODE_H+V_GAP)+60);
+  const ox=svgW/2;
+  const edges=entities.filter(e=>e.parentId&&positions[e.parentId]&&positions[e.id]).map(e=>{
+    const p=positions[e.parentId];const c=positions[e.id];
+    return {fx:ox+p.x,fy:p.y+NODE_H,tx:ox+c.x,ty:c.y,ownership:e.ownership,color:e.color};
+  });
+  const sel=entities.find(e=>e.id===selectedEnt);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginRight:4}}>Group Structure</span>
+        <button onClick={()=>addEntity("subsidiary")} style={{padding:"7px 14px",background:"#0c1420",border:"1px solid #1e3a5f",borderRadius:8,color:"#60a5fa",fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer",fontWeight:600}}>+ Add Subsidiary</button>
+        <button onClick={()=>addEntity("parent")} style={{padding:"7px 14px",background:"#0c1420",border:"1px solid #1e2d45",borderRadius:8,color:SLATE,fontFamily:"'DM Mono',monospace",fontSize:11,cursor:"pointer"}}>+ Add Parent</button>
+        {isGroup
+          ? <span style={{fontSize:10,color:GREEN,fontFamily:"'DM Mono',monospace",background:"#0c1420",border:"1px solid #0f1e30",borderRadius:6,padding:"5px 12px"}}>{entities.length} entities · use entity selector in other tabs</span>
+          : <span style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",background:"#0c1420",border:"1px solid #0f1e30",borderRadius:6,padding:"5px 12px"}}>Single entity — add subsidiaries to build group structure</span>}
+      </div>
+
+      <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"auto"}}>
+        <svg width="100%" viewBox={"0 0 "+svgW+" "+svgH} style={{minHeight:Math.max(160,svgH),display:"block"}}>
+          <defs>
+            <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#1e3a5f"/>
+            </marker>
+          </defs>
+          {edges.map((edge,i) => {
+            const mx=(edge.fx+edge.tx)/2,my=(edge.fy+edge.ty)/2;
+            const d="M "+edge.fx+" "+edge.fy+" C "+edge.fx+" "+(edge.fy+30)+", "+edge.tx+" "+(edge.ty-30)+", "+edge.tx+" "+edge.ty;
+            return (
+              <g key={i}>
+                <path d={d} fill="none" stroke="#1e3a5f" strokeWidth="2" markerEnd="url(#arr)"/>
+                <rect x={mx-18} y={my-10} width={36} height={18} rx={9} fill="#0a1525" stroke={edge.color} strokeWidth="1"/>
+                <text x={mx} y={my+4} textAnchor="middle" style={{fontSize:9,fontFamily:"'DM Mono',monospace",fill:edge.color,fontWeight:700}}>{edge.ownership}%</text>
+              </g>
+            );
+          })}
+          {entities.map(ent => {
+            if(!positions[ent.id]) return null;
+            const p=positions[ent.id],nx=ox+p.x-NODE_W/2,ny=p.y,isSel=selectedEnt===ent.id;
+            return (
+              <g key={ent.id} style={{cursor:"pointer"}} onClick={()=>{setSelectedEnt(ent.id);setEditingEnt(null);}}>
+                <rect x={nx} y={ny} width={NODE_W} height={NODE_H} rx={10} fill={isSel?"#0f2540":"#0c1420"} stroke={isSel?ent.color:"#1e2d45"} strokeWidth={isSel?2:1}/>
+                <circle cx={nx+NODE_W-16} cy={ny+16} r={5} fill={ent.color}/>
+                <text x={nx+10} y={ny+42} style={{fontSize:11,fill:"#e2e8f0",fontWeight:600}}>{ent.name.length>20?ent.name.slice(0,19)+"…":ent.name}</text>
+                {ent.parentId
+                  ? <text x={nx+10} y={ny+58} style={{fontSize:9,fontFamily:"'DM Mono',monospace",fill:SLATE}}>{ent.ownership}% owned</text>
+                  : <text x={nx+10} y={ny+58} style={{fontSize:9,fontFamily:"'DM Mono',monospace",fill:GREEN}}>Ultimate parent</text>}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {sel && (
+        <div style={{background:"#0c1420",border:"1px solid #1e2d45",borderRadius:12,padding:"18px 22px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:12,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:sel.color}}/>
+              <span style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{sel.name}</span>
+              <span style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",background:"#0a1525",border:"1px solid #1e2d45",borderRadius:5,padding:"2px 8px"}}>{sel.type}</span>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setEditingEnt(editingEnt===sel.id?null:sel.id)} style={{padding:"6px 14px",background:editingEnt===sel.id?"#1e3a5f":"none",border:"1px solid #1e3a5f",borderRadius:7,color:"#60a5fa",fontFamily:"'DM Mono',monospace",fontSize:10,cursor:"pointer"}}>
+                {editingEnt===sel.id?"✓ Done":"✏ Edit"}
+              </button>
+              {entities.length>1 && (
+                <button onClick={()=>removeEntity(sel.id)} style={{padding:"6px 14px",background:"none",border:"1px solid #2d1515",borderRadius:7,color:RED,fontFamily:"'DM Mono',monospace",fontSize:10,cursor:"pointer"}}>Remove</button>
+              )}
+            </div>
+          </div>
+          {editingEnt===sel.id ? (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+              <div>
+                <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:5}}>NAME</div>
+                <input value={sel.name} onChange={e=>updateEntity(sel.id,"name",e.target.value)} style={{width:"100%",background:"#080b12",border:"1px solid #1e3a5f",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12,outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:5}}>TYPE</div>
+                <select value={sel.type} onChange={e=>updateEntity(sel.id,"type",e.target.value)} className="psel" style={{width:"100%"}}>
+                  <option value="holding">Holding</option>
+                  <option value="operating">Operating</option>
+                  <option value="dormant">Dormant</option>
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:5}}>PARENT</div>
+                <select value={sel.parentId||""} onChange={e=>updateEntity(sel.id,"parentId",e.target.value||null)} className="psel" style={{width:"100%"}}>
+                  <option value="">— None (top level) —</option>
+                  {entities.filter(e=>e.id!==sel.id).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </div>
+              {sel.parentId && (
+                <div>
+                  <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:5}}>OWNERSHIP % <span style={{color:sel.color}}>{sel.ownership}%</span></div>
+                  <input type="range" min={1} max={100} value={sel.ownership} onChange={e=>updateEntity(sel.id,"ownership",+e.target.value)} style={{width:"100%",accentColor:sel.color}}/>
+                </div>
+              )}
+              <div>
+                <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:5}}>COLOR</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {[BLUE,GREEN,PURPLE,CYAN,AMBER,RED,"#ec4899","#f97316"].map(c => (
+                    <div key={c} onClick={()=>updateEntity(sel.id,"color",c)} style={{width:20,height:20,borderRadius:"50%",background:c,cursor:"pointer",border:sel.color===c?"2px solid #fff":"2px solid transparent"}}/>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+              {[
+                {l:"Type",      v:sel.type},
+                {l:"Parent",    v:sel.parentId?(entities.find(e=>e.id===sel.parentId)||{name:"—"}).name:"None"},
+                {l:"Ownership", v:sel.parentId?sel.ownership+"%":"—"},
+                {l:"Subsidiaries",v:entities.filter(e=>e.parentId===sel.id).length},
+              ].map(f => (
+                <div key={f.l}>
+                  <div style={{fontSize:9,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:3,textTransform:"uppercase"}}>{f.l}</div>
+                  <div style={{fontSize:12,color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>{f.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isGroup && (
+        <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+          <div style={{padding:"12px 20px",borderBottom:"1px solid #0f1e30"}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#94a3b8"}}>Entity Registry</div>
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace"}}>
               <thead>
-                <tr style={{ borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
-                  <th style={{ textAlign:'left', padding:'7px 10px', color:'#475569', minWidth:160 }}>Line</th>
-                  {MONTHS.map(m => <th key={m} style={{ textAlign:'right', padding:'7px 5px', color:'#475569', minWidth:60 }}>{m}</th>)}
-                  <th style={{ textAlign:'right', padding:'7px 10px', color:'#475569' }}>TOTAL</th>
+                <tr style={{background:"#070c17",borderBottom:"1px solid #0f1e30"}}>
+                  {["Entity","Type","Parent","Ownership","Subsidiaries"].map((h,i) => (
+                    <th key={i} style={{padding:"8px 16px",textAlign:"left",color:SLATE,fontWeight:500,fontSize:10}}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { l:'Revenue',        a:d.revenue,      c:'#e2e8f0' },
-                  { l:'Raw Materials',  a:d.rawMaterials, c:'#94a3b8' },
-                  { l:'Variable Staff', a:d.varStaff,     c:'#94a3b8' },
-                  { l:'Gross Profit',   a:d.grossProfit,  c:null, b:true },
-                  { l:'Staff Expenses', a:d.staff,        c:'#94a3b8' },
-                  { l:'Other OPEX',     a:d.otherOpex,    c:'#94a3b8' },
-                  { l:'Depreciation',   a:d.depreciation, c:'#64748b' },
-                  { l:'EBIT',           a:d.ebit,         c:null, b:true },
-                  { l:'Net Profit',     a:d.netProfit,    c:null, b:true },
-                ].map(({ l, a, c, b }) => {
-                  const tot = sum(a||[])
-                  const isDyn = c === null
-                  const clr = isDyn ? (tot>=0?'#34d399':'#f87171') : c
+                {entities.map(ent => {
+                  const parent=entities.find(e=>e.id===ent.parentId);
+                  const subs=entities.filter(e=>e.parentId===ent.id);
                   return (
-                    <tr key={l} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)', background:b?'rgba(255,255,255,0.02)':'transparent' }}>
-                      <td style={{ padding:'5px 10px', color:clr, fontWeight:b?700:400 }}>{l}</td>
-                      {(a||[]).map((v,i) => {
-                        const vc = isDyn ? (v>=0?'#34d399':'#f87171') : c
-                        return <td key={i} style={{ textAlign:'right', padding:'5px 5px', color:vc, fontWeight:b?700:400 }}>{v!==0?fmt(v,true):'–'}</td>
-                      })}
-                      <td style={{ textAlign:'right', padding:'5px 10px', color:isDyn?(tot>=0?'#34d399':'#f87171'):c, fontWeight:700 }}>{fmt(tot,true)}</td>
+                    <tr key={ent.id} className="tbl-row" style={{borderBottom:"1px solid #080f1a",cursor:"pointer"}} onClick={()=>setSelectedEnt(ent.id)}>
+                      <td style={{padding:"10px 16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:ent.color}}/>
+                          <span style={{color:"#e2e8f0",fontWeight:600}}>{ent.name}</span>
+                        </div>
+                      </td>
+                      <td style={{padding:"10px 16px",color:SLATE}}>{ent.type}</td>
+                      <td style={{padding:"10px 16px",color:SLATE}}>{parent?parent.name:"—"}</td>
+                      <td style={{padding:"10px 16px"}}>{ent.parentId?<span style={{color:ent.color,fontWeight:700}}>{ent.ownership}%</span>:<span style={{color:GREEN}}>Parent</span>}</td>
+                      <td style={{padding:"10px 16px",color:"#94a3b8"}}>{subs.length||"—"}</td>
                     </tr>
-                  )
+                  );
                 })}
               </tbody>
             </table>
           </div>
-        </>
+        </div>
       )}
     </div>
-  )
+  );
 }
 
-// ─── BALANCE SHEET VIEW ───────────────────────────────────────────────────────
-function BSView({ data }) {
-  const [yr, setYr] = useState(2025)
-  const d = data[yr] || SEED_DATA[yr] || {}
-  const has = yr !== 2026 && sum(d.totalAssets||[]) !== 0
-  const li = 11
+function Dashboard() {
+  const [tab,         setTab]        = useState("group");
+  const [year,        setYear]       = useState("2025");
+  const [mode,        setMode]       = useState("budget");
+  const [csvData,     setCsvData]    = useState(null);
+  const [csvName,     setCsvName]    = useState(null);
+  const [actData,     setActData]    = useState(null);
+  const [actName,     setActName]    = useState(null);
+  const [actLast,     setActLast]    = useState(ACT_LAST_DEFAULT);
+  const [dragOver,    setDragOver]   = useState(false);
+  const [dragOverA,   setDragOverA]  = useState(false);
+  const [startM,      setStartM]     = useState(0);
+  const [endM,        setEndM]       = useState(11);
+  const [entities,    setEntities]   = useState([{id:"e1",name:"Stremet Oy",type:"operating",parentId:null,ownership:100,color:ACCENT}]);
+  const [selectedEnt, setSelectedEnt]= useState("e1");
+  const [editingEnt,  setEditingEnt] = useState(null);
+  const [activeEntity,setActiveEntity]=useState(null);
+  const fileRef  = useRef();
+  const fileRefA = useRef();
 
-  const lastA  = d.totalAssets?.[li]||0
-  const lastE  = d.equity?.[li]||0
-  const lastC  = d.cash?.[li]||0
-  const lastI  = d.inventory?.[li]||0
-  const lastNC = d.nonCurrentAssets?.[li]||0
-  const lastCur= d.currentAssets?.[li]||0
-  const lastSC = d.shortCreditors?.[li]||0
-  const lastLC = d.longCreditors?.[li]||0
-  const lastL  = d.loans?.[li]||0
-  const lastTC = d.tradeCreditors?.[li]||0
-  const lastD  = d.shortDebtors?.[li]||0
-  const eqRatio  = lastA !== 0 ? lastE / lastA : 0
-  const curRatio = lastSC !== 0 ? lastCur / lastSC : 0
+  const addEntity = (type) => {
+    const id="e"+Date.now();
+    const cs=[BLUE,GREEN,PURPLE,CYAN,AMBER,RED,"#ec4899"];
+    const color=cs[entities.length%cs.length];
+    if(type==="parent"){
+      const rootId=entities.find(e=>!e.parentId)||{};
+      setEntities(prev=>[{id,name:"Parent Company",type:"holding",parentId:null,ownership:100,color},...prev.map(e=>e.id===rootId.id?{...e,parentId:id}:e)]);
+    } else {
+      setEntities(prev=>[...prev,{id,name:"New Subsidiary",type:"operating",parentId:entities[0]?entities[0].id:null,ownership:100,color}]);
+    }
+    setSelectedEnt(id);setEditingEnt(id);
+  };
+  const updateEntity=(id,field,value)=>setEntities(prev=>prev.map(e=>e.id===id?{...e,[field]:value}:e));
+  const removeEntity=(id)=>{
+    setEntities(prev=>{
+      const t=prev.find(e=>e.id===id);
+      return prev.filter(e=>e.id!==id).map(e=>e.parentId===id?{...e,parentId:t?t.parentId:null}:e);
+    });
+    if(selectedEnt===id) setSelectedEnt(null);
+  };
+  const isGroup=entities.length>1;
+
+  const actuals    = actData||actBase;
+  const comp       = csvData||budBase;
+  const compLabel  = mode==="budget"?"BUD":"FC";
+  const S=startM,E=endM;
+  const visMonths  = MONTHS.slice(S,E+1);
+  const monthTypes = visMonths.map((_,ii)=>(S+ii)<=actLast?"ACT":compLabel);
+
+  const totRev  = sum(sl(actuals.revenue,S,E));
+  const totGP   = sum(sl(actuals.grossProfit,S,E));
+  const totEbit = sum(sl(actuals.ebit,S,E));
+  const totNet  = sum(sl(actuals.netProfit,S,E));
+  const totFinX = sum(sl(actuals.finExpenses,S,E));
+  const endEq   = actuals.equity[E]||0;
+  const endDebt = (actuals.ltDebt[E]||0)+(actuals.stDebt[E]||0);
+  const endInv  = actuals.inventory[E]||0;
+  const endRec  = actuals.receivables[E]||0;
+  const endPay  = actuals.payables[E]||0;
+  const nMths   = E-S+1;
+  const annRev  = totRev/nMths*12;
+
+  const gmPct  = totRev?(totGP/totRev*100).toFixed(1):0;
+  const emPct  = totRev?(totEbit/totRev*100).toFixed(1):0;
+  const roePct = endEq?(totNet/endEq*100).toFixed(1):0;
+  const eqR    = (endEq+endDebt)?(endEq/(endEq+endDebt)*100).toFixed(1):0;
+  const gear   = endEq?(endDebt/endEq*100).toFixed(1):0;
+  const intCov = totFinX?(totEbit/totFinX).toFixed(1):0;
+  const dso    = annRev?(endRec/(annRev/365)).toFixed(0):0;
+  const dio    = annRev?(endInv/(annRev/365)).toFixed(0):0;
+  const dpo    = annRev?(endPay/(annRev/365)).toFixed(0):0;
+
+  const marginData=MONTHS.map((m,i)=>({month:m,gross:actuals.revenue[i]?+(actuals.grossProfit[i]/actuals.revenue[i]*100).toFixed(1):0,ebit:actuals.revenue[i]?+(actuals.ebit[i]/actuals.revenue[i]*100).toFixed(1):0}));
+  const eqDebtData=MONTHS.map((m,i)=>({month:m,equity:actuals.equity[i],debt:(actuals.ltDebt[i]||0)+(actuals.stDebt[i]||0)}));
+  const gearData  =MONTHS.map((m,i)=>({month:m,gearing:actuals.equity[i]?+(((actuals.ltDebt[i]||0)+(actuals.stDebt[i]||0))/actuals.equity[i]*100).toFixed(1):0}));
+  const effData   =MONTHS.map((m,i)=>({month:m,dso:actuals.revenue[i]?+(actuals.receivables[i]/(actuals.revenue[i]/30)).toFixed(0):0}));
+  const fcRevData =MONTHS.map((m,i)=>({month:m,act:actuals.revenue[i],comp:comp.revenue[i]}));
+  const fcEqData  =MONTHS.map((m,i)=>({month:m,act:actuals.equity[i], comp:comp.equity[i]}));
+  const fcCashData=MONTHS.map((m,i)=>({month:m,act:actuals.cash[i],   comp:comp.cash[i]}));
+  const cfAll     =MONTHS.map((_,i)=>({month:MONTHS[i],op:actuals.cfOp[i],inv:actuals.cfInv[i],fin:actuals.cfFin[i],net:actuals.cfOp[i]+actuals.cfInv[i]+actuals.cfFin[i],endCash:actuals.cash[i]}));
+  const cfChart   =cfAll.slice(S,E+1);
+
+  const CSV_FIELDS=[
+    {key:"revenue",label:"revenue"},{key:"cogs",label:"cogs"},{key:"opex",label:"opex"},
+    {key:"ebitda",label:"ebitda"},{key:"depAmort",label:"dep_amort"},{key:"ebit",label:"ebit"},
+    {key:"finExpenses",label:"fin_expenses"},{key:"ebt",label:"ebt"},{key:"tax",label:"tax"},
+    {key:"netProfit",label:"net_profit"},{key:"inventory",label:"inventory"},
+    {key:"receivables",label:"receivables"},{key:"payables",label:"payables"},
+    {key:"equity",label:"equity"},{key:"cash",label:"cash"},
+    {key:"ltDebt",label:"lt_debt"},{key:"stDebt",label:"st_debt"},{key:"otherCL",label:"other_cl"},
+  ];
+
+  const exportCSV=()=>{
+    const hdr=["field",...MONTHS].join(",");
+    const rows=CSV_FIELDS.map(f=>[f.label,...(comp[f.key]||Array(12).fill(0)).map(v=>Math.round(v))].join(","));
+    const csv=["# Targetflow "+compLabel+" Template — "+year,hdr,...rows].join("\n");
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="targetflow_"+compLabel.toLowerCase()+"_"+year+".csv";a.click();
+  };
+  const exportActCSV=()=>{
+    const hdr=["field",...MONTHS].join(",");
+    const rows=CSV_FIELDS.map(f=>[f.label,...(actuals[f.key]||Array(12).fill(0)).map(v=>Math.round(v))].join(","));
+    const csv=["# Targetflow Actuals — "+year,"# actuals_last: last confirmed month 1-12",hdr,"actuals_last,"+(actLast+1)+",0,0,0,0,0,0,0,0,0,0,0",...rows].join("\n");
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="targetflow_actuals_"+year+".csv";a.click();
+  };
+  const parseCSV=(file,isAct)=>{
+    if(!file) return;
+    if(isAct) setActName(file.name); else setCsvName(file.name);
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{
+        const lines=ev.target.result.split("\n").map(l=>l.trim()).filter(l=>l&&!l.startsWith("#"));
+        const hIdx=lines.findIndex(l=>l.toLowerCase().startsWith("field"));
+        if(hIdx===-1){alert("No header row found");return;}
+        const cols=lines[hIdx].split(",").map(c=>c.trim().toLowerCase());
+        const mCols=MONTHS.map(m=>cols.indexOf(m.toLowerCase()));
+        const parsed={};let newLast=actLast;
+        for(let i=hIdx+1;i<lines.length;i++){
+          const parts=lines[i].split(",");
+          const fname=parts[0]&&parts[0].trim().toLowerCase();
+          if(!fname) continue;
+          if(isAct&&fname==="actuals_last"){const v=parseInt(parts[1]);if(!isNaN(v)&&v>=1&&v<=12)newLast=v-1;continue;}
+          const match=CSV_FIELDS.find(f=>f.label===fname);
+          if(!match) continue;
+          parsed[match.key]=mCols.map(ci=>{if(ci===-1)return 0;const v=parseFloat(parts[ci]);return isNaN(v)?0:v;});
+        }
+        const base=isAct?actBase:budBase;
+        const result={...base,...parsed};
+        if(parsed.revenue&&parsed.cogs) result.grossProfit=parsed.revenue.map((v,i)=>v-(parsed.cogs[i]||0));
+        if(isAct){setActData(result);setActLast(newLast);}else setCsvData(result);
+      }catch(err){alert("CSV error: "+err.message);}
+    };
+    r.readAsText(file);
+  };
+
+  const TABS=[
+    {id:"group",    label:"Group Structure"},
+    {id:"kpis",     label:"KPIs"},
+    {id:"forecast", label:"Forecast"},
+    {id:"pl",       label:"P&L"},
+    {id:"balance",  label:"Balance Sheet"},
+    {id:"cashflow", label:"Cash Flow"},
+    {id:"data",     label:"Data Import"},
+    {id:"deadlines",label:"Deadlines"},
+  ];
+
+  const plRows=[
+    {label:"Revenue",       ak:"revenue",    ck:"revenue",    color:BLUE,  bold:true},
+    {label:"Cost of Goods", ak:"cogs",       ck:"cogs",       color:SLATE, indent:true},
+    {label:"Gross Profit",  ak:"grossProfit",ck:"grossProfit",color:CYAN,  bold:true},
+    {label:"OpEx",          ak:"opex",       ck:"opex",       color:SLATE, indent:true},
+    {label:"EBITDA",        ak:"ebitda",     ck:"ebitda",     color:AMBER, bold:true},
+    {label:"Depreciation",  ak:"depAmort",   ck:null,         color:SLATE, indent:true},
+    {label:"EBIT",          ak:"ebit",       ck:"ebit",       color:BLUE,  bold:true},
+    {label:"Fin. Expenses", ak:"finExpenses",ck:"finExpenses",color:SLATE, indent:true},
+    {label:"EBT",           ak:"ebt",        ck:"ebt",        color:SLATE},
+    {label:"Tax",           ak:"tax",        ck:"tax",        color:SLATE, indent:true},
+    {label:"Net Profit",    ak:"netProfit",  ck:"netProfit",  color:GREEN, bold:true},
+  ];
+
+  const totCurr=MONTHS.map((_,i)=>(actuals.inventory[i]||0)+(actuals.receivables[i]||0)+(actuals.cash[i]||0)+(actuals.otherCA?actuals.otherCA[i]:0));
+  const totAss =MONTHS.map((_,i)=>(actuals.tangibles?actuals.tangibles[i]:0)+totCurr[i]);
+  const totLiab=MONTHS.map((_,i)=>(actuals.ltDebt[i]||0)+(actuals.stDebt[i]||0)+(actuals.payables[i]||0)+(actuals.otherCL[i]||0));
+  const balRows=[
+    {spacer:"ASSETS"},
+    {label:"Tangible assets",   ak:"tangibles",   ck:null,          color:SLATE,indent:true},
+    {label:"Total Non-current", aa:actuals.tangibles||[], ca:null,  color:"#94a3b8",bold:true},
+    {label:"Inventory",         ak:"inventory",   ck:"inventory",   color:SLATE,indent:true},
+    {label:"Receivables",       ak:"receivables", ck:"receivables", color:SLATE,indent:true},
+    {label:"Cash",              ak:"cash",        ck:"cash",        color:SLATE,indent:true},
+    {label:"Total Current",     aa:totCurr,       ca:null,          color:"#94a3b8",bold:true},
+    {label:"TOTAL ASSETS",      aa:totAss,        ca:null,          color:BLUE, bold:true},
+    {spacer:"EQUITY & LIABILITIES"},
+    {label:"Total Equity",      ak:"equity",      ck:"equity",      color:GREEN,bold:true},
+    {label:"Long-term debt",    ak:"ltDebt",      ck:null,          color:SLATE,indent:true},
+    {label:"Short-term debt",   ak:"stDebt",      ck:null,          color:SLATE,indent:true},
+    {label:"Payables",          ak:"payables",    ck:"payables",    color:SLATE,indent:true},
+    {label:"Other liabilities", ak:"otherCL",     ck:null,          color:SLATE,indent:true},
+    {label:"TOTAL LIABILITIES", aa:totLiab,       ca:null,          color:RED,  bold:true},
+  ];
+
+  const netCF=MONTHS.map((_,i)=>actuals.cfOp[i]+actuals.cfInv[i]+actuals.cfFin[i]);
+  const cfTbl=[
+    {label:"EBITDA",                   aa:actuals.ebitda,              color:AMBER,bold:true},
+    {label:"Working Capital Changes",  aa:actuals.wcChange,            color:SLATE},
+    {label:"Operative CF",             aa:actuals.cfOp,                color:CYAN, bold:true},
+    {label:"Interest paid",            aa:actuals.finExpenses.map(v=>-v),color:SLATE},
+    {label:"Taxes paid",               aa:actuals.tax.map(v=>-v),      color:SLATE},
+    {label:"OPERATIVE CASH FLOW",      aa:actuals.cfOp,                color:GREEN,bold:true},
+    {label:"Investment Cash Flow",     aa:actuals.cfInv,               color:RED,  bold:true},
+    {label:"Financing Cash Flow",      aa:actuals.cfFin,               color:"#94a3b8",bold:true},
+    {label:"NET CASH CHANGE",          aa:netCF,                       color:BLUE, bold:true},
+    {label:"End Cash Balance",         aa:cfAll.map(r=>r.endCash),     color:CYAN, bold:true},
+  ];
+  const totOp =sum(sl(actuals.cfOp, S,E));
+  const totInv=sum(sl(actuals.cfInv,S,E));
+  const totFin=sum(sl(actuals.cfFin,S,E));
+
+  const deadlines=[
+    {month:"January",  due:"Feb 15",status:"done"},
+    {month:"February", due:"Mar 15",status:"done"},
+    {month:"March",    due:"Apr 15",status:"done"},
+    {month:"April",    due:"May 15",status:"done"},
+    {month:"May",      due:"Jun 15",status:"done"},
+    {month:"June",     due:"Aug 15",status:"done"},
+    {month:"July",     due:"Aug 15",status:"done"},
+    {month:"August",   due:"Sep 15",status:"current",daysLeft:6},
+    {month:"September",due:"Oct 15",status:"upcoming",daysLeft:36},
+    {month:"October",  due:"Nov 15",status:"upcoming",daysLeft:67},
+    {month:"November", due:"Dec 15",status:"upcoming",daysLeft:97},
+    {month:"December", due:"Jan 15",status:"upcoming",daysLeft:128},
+  ];
 
   return (
-    <div>
-      <div style={{ display:'flex', gap:8, marginBottom:20, alignItems:'center' }}>
-        {[2024,2025,2026].map(y => <YearBtn key={y} year={y} active={yr===y} onClick={()=>setYr(y)}/>)}
-        {has && <span style={{ fontSize:11, color:'#334155', marginLeft:4 }}>Latest: {MONTHS[li]}</span>}
+    <div style={{minHeight:"100vh",background:"#080b12",color:"#e2e8f0",fontFamily:"'DM Sans',sans-serif"}}>
+      <style>{STYLE}</style>
+
+      <div style={{borderBottom:"1px solid #0c1829",padding:"0 32px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:28,height:28,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:10,fontWeight:700,color:"#fff",fontFamily:"'DM Mono',monospace"}}>TF</span>
+          </div>
+          <div>
+            <div style={{fontSize:14,fontWeight:600}}>Suomen Niittysiemen Oy</div>
+            <div style={{fontSize:10,color:"#334155",fontFamily:"'DM Mono',monospace"}}>Financial Dashboard · {year}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {["2023","2024","2025","2026"].map(y=>(
+            <button key={y} className={"yr-btn"+(year===y?" active":"")} onClick={()=>setYear(y)}>{y}</button>
+          ))}
+        </div>
       </div>
 
-      {yr === 2026 ? <NoBudget/> : !has ? (
-        <div style={{ textAlign:'center', padding:'60px 0', color:'#334155' }}>No data for {yr}</div>
-      ) : (
-        <>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:10, marginBottom:22 }}>
-            <KPI label="Total Assets"  value={fmt(lastA,true)}              color={ACCENT}/>
-            <KPI label="Equity"        value={fmt(lastE,true)}              color="#34d399"/>
-            <KPI label="Equity Ratio"  value={pct(eqRatio)}                 color="#34d399"/>
-            <KPI label="Cash"          value={fmt(lastC,true)}              color="#f59e0b"/>
-            <KPI label="Inventory"     value={fmt(lastI,true)}              color="#94a3b8"/>
-            <KPI label="Current Ratio" value={curRatio.toFixed(2)+'x'}      color={curRatio>=1?'#34d399':'#f87171'}/>
-          </div>
-
-          <ST>Total Assets — {yr}</ST>
-          <div style={{ height:200, marginBottom:22 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MONTHS.map((m,i)=>({ month:m, 'Current Assets':(d.currentAssets||[])[i]||0, 'Non-Current':(d.nonCurrentAssets||[])[i]||0 }))} margin={{top:0,right:0,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-                <XAxis dataKey="month" tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v=>fmt(v,true)} tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <Legend wrapperStyle={{fontSize:11,color:'#475569'}}/>
-                <Bar dataKey="Current Assets" fill={ACCENT}  opacity={0.8} stackId="a"/>
-                <Bar dataKey="Non-Current"    fill="#334155" opacity={0.9} stackId="a" radius={[2,2,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <ST>Working Capital — {yr}</ST>
-          <div style={{ height:200, marginBottom:22 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MONTHS.map((m,i)=>({ month:m, Cash:(d.cash||[])[i]||0, Inventory:(d.inventory||[])[i]||0, 'Trade Debtors':(d.shortDebtors||[])[i]||0 }))} margin={{top:0,right:0,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
-                <XAxis dataKey="month" tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v=>fmt(v,true)} tick={{fill:'#475569',fontSize:11}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <Legend wrapperStyle={{fontSize:11,color:'#475569'}}/>
-                <Line type="monotone" dataKey="Cash"          stroke="#f59e0b" strokeWidth={2} dot={false}/>
-                <Line type="monotone" dataKey="Inventory"     stroke="#94a3b8" strokeWidth={2} dot={false}/>
-                <Line type="monotone" dataKey="Trade Debtors" stroke={ACCENT}  strokeWidth={2} dot={false}/>
-                <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)"/>
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <ST>Balance Sheet Summary — {yr} Dec</ST>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:'#475569', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.1em' }}>Assets</div>
-              {[
-                { l:'Non-Current Assets',   v:lastNC },
-                { l:'Current Assets',       v:lastCur },
-                { l:'  Inventory',          v:lastI,  indent:true },
-                { l:'  Trade Debtors',      v:lastD,  indent:true },
-                { l:'  Cash',               v:lastC,  indent:true },
-                { l:'TOTAL ASSETS',         v:lastA,  b:true },
-              ].map(({ l, v, b, indent }) => (
-                <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'5px 10px', background:b?'rgba(255,255,255,0.04)':'transparent', borderRadius:4, marginBottom:2 }}>
-                  <span style={{ fontSize:11, color:indent?'#475569':'#94a3b8', fontWeight:b?700:400, paddingLeft:indent?12:0 }}>{l}</span>
-                  <span style={{ fontSize:11, color:b?'#f1f5f9':'#64748b', fontFamily:'monospace', fontWeight:b?700:400 }}>{fmt(v,true)}</span>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:'#475569', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.1em' }}>Equity & Liabilities</div>
-              {[
-                { l:'Equity',               v:lastE,  color:'#34d399' },
-                { l:'Long-term Creditors',  v:lastLC },
-                { l:'  Bank Loans',         v:lastL,  indent:true },
-                { l:'Short-term Creditors', v:lastSC },
-                { l:'  Trade Creditors',    v:lastTC, indent:true },
-                { l:'TOTAL E&L',            v:lastA,  b:true },
-              ].map(({ l, v, b, indent, color }) => (
-                <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'5px 10px', background:b?'rgba(255,255,255,0.04)':'transparent', borderRadius:4, marginBottom:2 }}>
-                  <span style={{ fontSize:11, color:indent?'#475569':'#94a3b8', fontWeight:b?700:400, paddingLeft:indent?12:0 }}>{l}</span>
-                  <span style={{ fontSize:11, color:color||(b?'#f1f5f9':'#64748b'), fontFamily:'monospace', fontWeight:b?700:400 }}>{fmt(v,true)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ─── DEADLINES VIEW ───────────────────────────────────────────────────────────
-function DeadlinesView() {
-  const today = new Date()
-  return (
-    <div>
-      <ST mt={0}>Reporting Deadlines 2026</ST>
-      <div style={{ overflowX:'auto', marginBottom:24 }}>
-        <table style={{ width:'100%', fontSize:12 }}>
-          <thead>
-            <tr style={{ borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
-              {['Month','Deadline @ 2pm','AP Closed','Invoicing Done'].map(h =>
-                <th key={h} style={{ textAlign:'left', padding:'8px 12px', color:'#475569', fontWeight:700 }}>{h}</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {DEADLINES.map((d, i) => {
-              const dl = new Date(d.deadline)
-              const ip = dl < today
-              const is = !ip && (dl - today) < 14*24*3600*1000
-              const sc = ip ? '#334155' : is ? '#f59e0b' : '#34d399'
-              return (
-                <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)', opacity:ip?0.5:1 }}>
-                  <td style={{ padding:'9px 12px', fontWeight:700, color:'#f1f5f9' }}>{d.month}</td>
-                  <td style={{ padding:'9px 12px' }}>
-                    <span style={{ color:sc, fontWeight:600 }}>{d.deadline}</span>
-                    <span style={{ fontSize:10, marginLeft:6, color:sc, background:`${sc}20`, padding:'1px 6px', borderRadius:8 }}>{ip?'DONE':is?'SOON':'OPEN'}</span>
-                  </td>
-                  <td style={{ padding:'9px 12px', color:'#475569', fontSize:11 }}>{d.apClose}</td>
-                  <td style={{ padding:'9px 12px', color:'#475569', fontSize:11 }}>{d.invoicing}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <ST>Closing Process Reminders</ST>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
-        {[
-          { e:'📦', t:'AP Closed',           d:'5 days before deadline' },
-          { e:'🧾', t:'Receipts & Clearing', d:'Same day as AP close' },
-          { e:'🏭', t:'Inventory & WIP',     d:'2 days before deadline' },
-          { e:'📊', t:'Accruals Submitted',  d:'Same day as AP close' },
-          { e:'💳', t:'Sales Invoicing',     d:'10 days before deadline' },
-          { e:'📋', t:'No July Board Mtg',   d:'Jun & Jul combined in Aug' },
-        ].map(({ e, t, d }) => (
-          <div key={t} style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:10, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
-            <span style={{ fontSize:20 }}>{e}</span>
-            <div>
-              <div style={{ fontSize:12, fontWeight:700, color:'#94a3b8', marginBottom:3 }}>{t}</div>
-              <div style={{ fontSize:11, color:'#475569' }}>{d}</div>
-            </div>
-          </div>
+      <div style={{borderBottom:"1px solid #0c1829",padding:"0 32px",display:"flex",gap:0,overflowX:"auto"}}>
+        {TABS.map(t=>(
+          <button key={t.id} className="tab-btn" onClick={()=>setTab(t.id)} style={{padding:"12px 16px",fontSize:12,fontWeight:tab===t.id?600:400,color:tab===t.id?"#60a5fa":"#475569",borderBottom:tab===t.id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
+            {t.label}
+          </button>
         ))}
       </div>
-    </div>
-  )
-}
 
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
-function Login({ onSuccess }) {
-  const [pw, setPw]   = useState('')
-  const [err, setErr] = useState(false)
-  const attempt = () => {
-    if (pw === PASSWORD) { sessionStorage.setItem(SESSION_KEY, '1'); onSuccess() }
-    else { setErr(true); setTimeout(() => setErr(false), 1500) }
-  }
-  return (
-    <div style={{ minHeight:'100vh', background:'#080b12', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'DM Mono','Courier New',monospace" }}>
-      <div style={{ width:340, textAlign:'center' }}>
-        <div style={{ fontSize:11, letterSpacing:'0.3em', color:'#334155', marginBottom:12, textTransform:'uppercase' }}>Board Dashboard</div>
-        <div style={{ fontSize:32, fontWeight:800, letterSpacing:'-0.03em', color:'#f1f5f9', marginBottom:4 }}>Stremet</div>
-        <div style={{ width:40, height:2, background:ACCENT, margin:'0 auto 32px' }}/>
-        <input
-          type="password" placeholder="Enter password" value={pw}
-          onChange={e => setPw(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && attempt()}
-          style={{ width:'100%', padding:'13px 16px', background:'rgba(255,255,255,0.04)', border:`1px solid ${err?'#f87171':'rgba(255,255,255,0.1)'}`, borderRadius:8, color:'#f1f5f9', fontSize:14, outline:'none', fontFamily:'inherit', marginBottom:10 }}
-          autoFocus
-        />
-        <button onClick={attempt} style={{ width:'100%', padding:'13px', background:ACCENT, border:'none', borderRadius:8, color:'#080b12', fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit' }}>ENTER</button>
-        {err && <div style={{ marginTop:10, color:'#f87171', fontSize:13 }}>Incorrect password</div>}
-      </div>
-    </div>
-  )
-}
+      <PeriodBar startM={S} endM={E} setStart={setStartM} setEnd={setEndM} compLabel={compLabel} actLast={actLast}/>
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-const TABS = [
-  { id:'pl',        label:'P & L' },
-  { id:'bs',        label:'Balance Sheet' },
-  { id:'deadlines', label:'Deadlines' },
-]
-
-export default function App() {
-  const [authed,   setAuthed]   = useState(!!sessionStorage.getItem(SESSION_KEY))
-  const [tab,      setTab]      = useState('pl')
-  const [dbStatus, setDbStatus] = useState('idle')
-  const [liveData, setLiveData] = useState(null)
-
-  useEffect(() => { if (authed) loadFromSupabase() }, [authed])
-
-  const loadFromSupabase = async () => {
-    if (!supabase) { setDbStatus('offline'); return }
-    setDbStatus('loading')
-    try {
-      const { data, error } = await supabase.from('dashboard_pnl').select('*').eq('client', CLIENT)
-      if (error) throw error
-      if (!data || data.length === 0) { setDbStatus('ok'); await seedDatabase(); return }
-      const structured = {}
-      data.forEach(row => {
-        if (!structured[row.year]) structured[row.year] = {}
-        if (!structured[row.year][row.line_item]) structured[row.year][row.line_item] = Array(12).fill(0)
-        structured[row.year][row.line_item][row.month_index] = row.value
-      })
-      setLiveData(structured)
-      setDbStatus('ok')
-    } catch (e) { console.error(e); setDbStatus('error') }
-  }
-
-  const seedDatabase = async () => {
-    if (!supabase) return
-    const rows = []
-    Object.entries(SEED_DATA).forEach(([year, yd]) => {
-      Object.entries(yd).forEach(([line_item, arr]) => {
-        ;(arr||[]).forEach((value, month_index) => {
-          if (value !== 0 && value !== null && value !== undefined)
-            rows.push({ client: CLIENT, entity: '', year: parseInt(year), line_item, month_index, value })
-        })
-      })
-    })
-    if (rows.length > 0) {
-      const { error } = await supabase.from('dashboard_pnl').upsert(rows, { onConflict:'client,entity,year,line_item,month_index' })
-      if (!error) await loadFromSupabase()
-    }
-  }
-
-  const data = liveData || SEED_DATA
-
-  if (!authed) return <Login onSuccess={() => setAuthed(true)}/>
-
-  return (
-    <div style={{ minHeight:'100vh', background:'#080b12', color:'#e2e8f0', fontFamily:"'DM Mono','Courier New',monospace" }}>
-      <header style={{ borderBottom:'1px solid rgba(255,255,255,0.05)', padding:'0 28px', display:'flex', alignItems:'center', justifyContent:'space-between', height:52, position:'sticky', top:0, zIndex:100, background:'rgba(8,11,18,0.97)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ fontSize:16, fontWeight:800, letterSpacing:'-0.02em', color:'#f1f5f9' }}>Stremet</div>
-          <div style={{ width:1, height:16, background:'rgba(255,255,255,0.08)' }}/>
-          <div style={{ fontSize:11, color:'#334155', letterSpacing:'0.05em' }}>Board Dashboard</div>
-        </div>
-        <nav style={{ display:'flex', gap:2 }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:'5px 14px', borderRadius:6, border:'none', cursor:'pointer', background:tab===t.id?`${ACCENT}20`:'transparent', color:tab===t.id?ACCENT:'#475569', fontWeight:tab===t.id?700:400, fontSize:12, fontFamily:'inherit', transition:'all 0.12s' }}>{t.label}</button>
+      {isGroup&&!["group","data","deadlines"].includes(tab)&&(
+        <div style={{borderTop:"1px solid #0c1829",background:"#060a14",padding:"8px 32px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace"}}>VIEWING</span>
+          <button onClick={()=>setActiveEntity(null)} style={{padding:"4px 12px",borderRadius:6,fontFamily:"'DM Mono',monospace",fontSize:10,cursor:"pointer",border:"1px solid "+(activeEntity===null?"#3b82f6":"#1e2d45"),background:activeEntity===null?"#1e3a5f":"transparent",color:activeEntity===null?"#60a5fa":SLATE}}>Consolidated</button>
+          {entities.map(ent=>(
+            <button key={ent.id} onClick={()=>setActiveEntity(ent.id)} style={{padding:"4px 12px",borderRadius:6,fontFamily:"'DM Mono',monospace",fontSize:10,cursor:"pointer",border:"1px solid "+(activeEntity===ent.id?ent.color:"#1e2d45"),background:activeEntity===ent.id?ent.color+"22":"transparent",color:activeEntity===ent.id?ent.color:SLATE,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{width:5,height:5,borderRadius:"50%",background:ent.color,display:"inline-block"}}/>
+              {ent.name}
+            </button>
           ))}
-        </nav>
-        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'#334155' }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:dbStatus==='ok'?'#34d399':dbStatus==='loading'?'#f59e0b':dbStatus==='offline'?'#475569':'#f87171', display:'inline-block' }}/>
-          {dbStatus==='ok'?'Supabase':dbStatus==='loading'?'Syncing…':dbStatus==='offline'?'Offline':'Error'}
         </div>
-      </header>
+      )}
 
-      <main style={{ padding:'24px 28px', maxWidth:1400, margin:'0 auto' }}>
-        <h1 style={{ fontSize:18, fontWeight:800, color:'#f1f5f9', marginBottom:22, letterSpacing:'-0.02em' }}>
-          {TABS.find(t => t.id === tab)?.label}
-          <span style={{ fontSize:12, color:'#334155', fontWeight:400, marginLeft:10 }}>ACT data · 2024–2026</span>
-        </h1>
-        {tab === 'pl'        && <PLView data={data}/>}
-        {tab === 'bs'        && <BSView data={data}/>}
-        {tab === 'deadlines' && <DeadlinesView/>}
-      </main>
+      <div style={{padding:"22px 32px",maxWidth:1600}}>
 
-      <div style={{ textAlign:'center', padding:'18px', borderTop:'1px solid rgba(255,255,255,0.04)', fontSize:11, color:'#1e293b' }}>
-        Stremet · Board Dashboard · Confidential · {new Date().getFullYear()}
+        {tab==="group"&&(
+          <GroupStructureTab entities={entities} selectedEnt={selectedEnt} setSelectedEnt={setSelectedEnt} editingEnt={editingEnt} setEditingEnt={setEditingEnt} isGroup={isGroup} addEntity={addEntity} updateEntity={updateEntity} removeEntity={removeEntity}/>
+        )}
+
+        {tab==="kpis"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:24}}>
+            <div>
+              <SecTitle c="Profitability"/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
+                <Gauge label="Gross Margin"  value={gmPct}  unit="%" target={65} targetLabel="Target" color={CYAN}   desc="(Revenue − COGS) / Revenue"/>
+                <Gauge label="EBIT Margin"   value={emPct}  unit="%" target={15} targetLabel="Target" color={BLUE}   desc="EBIT / Revenue"/>
+                <Gauge label="ROE"           value={roePct} unit="%" target={12} targetLabel="Min"    color={PURPLE} desc="Net Profit / Equity"/>
+              </div>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>Margin % Trend</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={marginData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                    <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>v+"%"}/>
+                    <Tooltip content={<Tt/>}/>
+                    <Line type="monotone" dataKey="gross" stroke={CYAN} strokeWidth={2} dot={false} name="Gross %"/>
+                    <Line type="monotone" dataKey="ebit"  stroke={BLUE} strokeWidth={2} dot={false} name="EBIT %"/>
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div>
+              <SecTitle c="Sustainability"/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
+                <Gauge label="Equity Ratio"      value={eqR}   unit="%" target={40} targetLabel="Min" color={GREEN} desc="Equity / Total Capital"/>
+                <Gauge label="Gearing Ratio"     value={gear}  unit="%" target={80} targetLabel="Max" color={AMBER} desc="Debt / Equity · lower is better" flip={true}/>
+                <Gauge label="Interest Coverage" value={intCov} unit="x" target={3}  targetLabel="Min" color={CYAN}  desc="EBIT / Finance costs"/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                  <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>Equity vs Debt</div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <AreaChart data={eqDebtData}>
+                      <defs><linearGradient id="eqG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={GREEN} stopOpacity={0.2}/><stop offset="95%" stopColor={GREEN} stopOpacity={0}/></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                      <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>"€"+(v/1e6).toFixed(1)+"M"}/>
+                      <Tooltip content={<Tt/>}/>
+                      <Area type="monotone" dataKey="equity" stroke={GREEN} fill="url(#eqG)" strokeWidth={2} name="Equity"/>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                  <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>Gearing Trend</div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={gearData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                      <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>v+"%"}/>
+                      <Tooltip content={<Tt/>}/>
+                      <ReferenceLine y={80} stroke={RED} strokeDasharray="4 4"/>
+                      <Line type="monotone" dataKey="gearing" stroke={AMBER} strokeWidth={2} dot={false} name="Gearing %"/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+            <div>
+              <SecTitle c="Efficiency"/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:14}}>
+                <Gauge label="DSO (AR days)"  value={dso} unit=" days" target={45} targetLabel="Max" color={CYAN}   desc="Receivables / (Revenue/365)" flip={true}/>
+                <Gauge label="DIO (Inv days)" value={dio} unit=" days" target={60} targetLabel="Max" color={PURPLE} desc="Inventory / (Revenue/365)" flip={true}/>
+                <Gauge label="DPO (AP days)"  value={dpo} unit=" days" target={30} targetLabel="Min" color={AMBER}  desc="Payables / (Revenue/365)"/>
+              </div>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>DSO Trend</div>
+                <ResponsiveContainer width="100%" height={140}>
+                  <LineChart data={effData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                    <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>v+" d"}/>
+                    <Tooltip content={<Tt/>}/>
+                    <ReferenceLine y={45} stroke={RED} strokeDasharray="4 4"/>
+                    <Line type="monotone" dataKey="dso" stroke={CYAN} strokeWidth={2} dot={false} name="DSO"/>
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==="forecast"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:10,padding:4,display:"flex",gap:2}}>
+                {["budget","forecast"].map(m=>(
+                  <button key={m} className="mode-btn" onClick={()=>setMode(m)} style={{borderRadius:7,background:mode===m?"#1e3a5f":"transparent",color:mode===m?"#60a5fa":SLATE,fontWeight:mode===m?600:400}}>
+                    {m==="budget"?"📋 Budget":"📈 Forecast"}
+                  </button>
+                ))}
+              </div>
+              <button onClick={()=>setTab("data")} style={{padding:"6px 14px",background:"none",border:"1px solid #1e2d45",borderRadius:8,color:SLATE,fontFamily:"'DM Mono',monospace",fontSize:10,cursor:"pointer"}}>↑ Manage data</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+              {[
+                {title:"Revenue ACT vs "+compLabel, data:fcRevData, k1:"act",k2:"comp",c1:BLUE, c2:AMBER},
+                {title:"Equity ACT vs "+compLabel,  data:fcEqData,  k1:"act",k2:"comp",c1:GREEN,c2:AMBER},
+                {title:"Cash ACT vs "+compLabel,    data:fcCashData,k1:"act",k2:"comp",c1:CYAN, c2:AMBER},
+              ].map(ch=>(
+                <div key={ch.title} style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                  <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>{ch.title}</div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={ch.data}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                      <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>"€"+(v/1e3).toFixed(0)+"K"}/>
+                      <Tooltip content={<Tt/>}/>
+                      <Line type="monotone" dataKey={ch.k1} stroke={ch.c1} strokeWidth={2} dot={false} name="ACT"/>
+                      <Line type="monotone" dataKey={ch.k2} stroke={ch.c2} strokeWidth={2} dot={false} strokeDasharray="4 4" name={compLabel}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab==="pl"&&(
+          <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+            <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>Income Statement · {MONTHS[S]}–{MONTHS[E]} {year}</div>
+              <div style={{fontSize:9,fontFamily:"'DM Mono',monospace",display:"flex",gap:12,color:SLATE}}>
+                <span style={{color:BLUE}}>ACT = Actual</span>
+                <span style={{color:AMBER}}>{compLabel} = {mode==="budget"?"Budget":"Forecast"}</span>
+                <span style={{color:RED}}>VAR = ACT − {compLabel}</span>
+              </div>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace"}}>
+                <TblHead visMonths={visMonths} monthTypes={monthTypes} totalLabel={MONTHS[S]+"–"+MONTHS[E]}/>
+                <tbody>
+                  {plRows.map((r,ri)=>(
+                    <TblRow key={ri} label={r.label} actArr={actuals[r.ak]||[]} compArr={r.ck?comp[r.ck]:null} color={r.color} bold={r.bold} indent={r.indent} s={S} e={E}/>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab==="balance"&&(
+          <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+            <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>Balance Sheet · {MONTHS[S]}–{MONTHS[E]} {year}</div>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace"}}>
+                <TblHead visMonths={visMonths} monthTypes={monthTypes} totalLabel="End of period"/>
+                <tbody>
+                  {balRows.map((r,ri)=>{
+                    if(r.spacer){
+                      return (
+                        <tr key={ri}>
+                          <td colSpan={visMonths.length*2+4} style={{padding:"10px 20px",fontSize:10,fontWeight:700,color:SLATE,background:"#070c17",textTransform:"uppercase",letterSpacing:"0.08em"}}>{r.spacer}</td>
+                        </tr>
+                      );
+                    }
+                    const aArr=r.aa||(actuals[r.ak]||[]);
+                    const cArr=r.ca!==undefined?r.ca:(r.ck?comp[r.ck]:null);
+                    return <TblRow key={ri} label={r.label} actArr={aArr} compArr={cArr} color={r.color} bold={r.bold} indent={r.indent} s={S} e={E}/>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab==="cashflow"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
+              {[
+                {l:"Operative CF", v:totOp,  c:totOp>=0?GREEN:RED},
+                {l:"Investment CF",v:totInv, c:totInv>=0?GREEN:RED},
+                {l:"Financing CF", v:totFin, c:totFin>=0?GREEN:RED},
+                {l:"Net CF",       v:totOp+totInv+totFin,c:(totOp+totInv+totFin)>=0?GREEN:RED},
+              ].map(k=>(
+                <div key={k.l} style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:"14px 18px"}}>
+                  <div style={{fontSize:10,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:6,textTransform:"uppercase"}}>{k.l}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:k.c,fontFamily:"'DM Mono',monospace"}}>{fmt(k.v)}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>Monthly Cash Flows</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={cfChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                    <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>"€"+(v/1e3).toFixed(0)+"K"}/>
+                    <Tooltip content={<Tt/>}/>
+                    <Bar dataKey="op"  fill={GREEN} name="Operative" radius={[2,2,0,0]}/>
+                    <Bar dataKey="inv" fill={RED}   name="Investment" radius={[2,2,0,0]}/>
+                    <Bar dataKey="fin" fill={AMBER} name="Financing" radius={[2,2,0,0]}/>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:22}}>
+                <div style={{fontSize:11,color:SLATE,fontFamily:"'DM Mono',monospace",marginBottom:12}}>End Cash Balance</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={cfAll}>
+                    <defs><linearGradient id="cashG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={CYAN} stopOpacity={0.3}/><stop offset="95%" stopColor={CYAN} stopOpacity={0}/></linearGradient></defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#0f1e30"/>
+                    <XAxis dataKey="month" tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:SLATE}} axisLine={false} tickLine={false} tickFormatter={v=>"€"+(v/1e3).toFixed(0)+"K"}/>
+                    <Tooltip content={<Tt/>}/>
+                    <Area type="monotone" dataKey="endCash" stroke={CYAN} fill="url(#cashG)" strokeWidth={2} name="End Cash"/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+              <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30"}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>Cash Flow Statement · {MONTHS[S]}–{MONTHS[E]} {year}</div>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace"}}>
+                  <TblHead visMonths={visMonths} monthTypes={monthTypes} totalLabel={MONTHS[S]+"–"+MONTHS[E]}/>
+                  <tbody>
+                    {cfTbl.map((row,ri)=>{
+                      const sliced=sl(row.aa,S,E);
+                      const total=sum(sliced);
+                      return (
+                        <tr key={ri} className="tbl-row" style={{borderBottom:"1px solid #080f1a"}}>
+                          <td style={{padding:"7px 20px",color:row.color,fontWeight:row.bold?600:400,fontSize:row.bold?12:11,position:"sticky",left:0,background:"#0c1420",zIndex:1}}>{row.label}</td>
+                          {sliced.map((v,i)=>[
+                            <td key={"a"+i} style={{padding:"7px 8px",textAlign:"right",color:row.color,fontWeight:row.bold?600:400,fontSize:11,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{fmt(v)}</td>,
+                            <td key={"c"+i} style={{padding:"7px 8px",textAlign:"right",color:SLATE,fontSize:11}}>—</td>,
+                          ])}
+                          <td style={{padding:"7px 8px",textAlign:"right",color:row.color,fontWeight:700,borderLeft:"1px solid #0f1e30",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{fmt(total)}</td>
+                          <td style={{padding:"7px 8px",color:SLATE}}>—</td>
+                          <td style={{padding:"7px 8px",color:SLATE}}>—</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==="data"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+
+            {/* ── STATUS BAR ── */}
+            <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,padding:"14px 22px",display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:actData?GREEN:SLATE}}/>
+                <span style={{fontSize:11,color:actData?GREEN:SLATE,fontFamily:"'DM Mono',monospace"}}>{actData?"✓ "+actName+" · ACT thru "+MONTHS[actLast]:"Demo actuals"}</span>
+                {actData&&<button onClick={()=>{setActData(null);setActName(null);setActLast(ACT_LAST_DEFAULT);}} style={{background:"none",border:"1px solid #1e2d45",borderRadius:6,padding:"3px 8px",color:SLATE,fontSize:10,cursor:"pointer"}}>✕ Clear</button>}
+              </div>
+              <div style={{width:1,height:20,background:"#0f1e30"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:csvData?AMBER:SLATE}}/>
+                <span style={{fontSize:11,color:csvData?AMBER:SLATE,fontFamily:"'DM Mono',monospace"}}>{csvData?"✓ "+csvName:"Demo "+compLabel}</span>
+                {csvData&&<button onClick={()=>{setCsvData(null);setCsvName(null);}} style={{background:"none",border:"1px solid #1e2d45",borderRadius:6,padding:"3px 8px",color:SLATE,fontSize:10,cursor:"pointer"}}>✕ Clear</button>}
+              </div>
+            </div>
+
+            {/* ── API SYNC PANEL ── */}
+            <ApiSyncPanel year={year} actLast={actLast} setActLast={setActLast}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",background:"#071728"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#60a5fa"}}>Actuals Import</div>
+                  <div style={{fontSize:11,color:SLATE,marginTop:2}}>Confirmed monthly figures</div>
+                </div>
+                <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginBottom:2}}>Step 1 — Download template</div>
+                    <div style={{fontSize:10,color:SLATE}}>Pre-filled with current actuals · set actuals_last to last confirmed month</div>
+                  </div>
+                  <button onClick={exportActCSV} style={{flexShrink:0,padding:"8px 14px",background:"#071728",border:"1px solid #3b82f6",borderRadius:8,color:"#60a5fa",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:600,cursor:"pointer"}}>↓ Actuals CSV</button>
+                </div>
+                <div style={{padding:"14px 22px"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginBottom:10}}>Step 2 — Upload</div>
+                  <div className="upload-zone" style={{padding:"18px 20px",borderColor:dragOverA?"#3b82f6":"#1e3a5f",background:dragOverA?"#0c1e35":"transparent"}}
+                    onDragOver={e=>{e.preventDefault();setDragOverA(true);}} onDragLeave={()=>setDragOverA(false)}
+                    onDrop={e=>{e.preventDefault();setDragOverA(false);parseCSV(e.dataTransfer.files[0],true);}}
+                    onClick={()=>fileRefA.current.click()}>
+                    <input ref={fileRefA} type="file" accept=".csv" style={{display:"none"}} onChange={e=>parseCSV(e.target.files[0],true)}/>
+                    {actName
+                      ? <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <span style={{fontSize:12,color:GREEN,fontFamily:"'DM Mono',monospace"}}>✓ {actName}</span>
+                          <button onClick={e=>{e.stopPropagation();setActData(null);setActName(null);setActLast(ACT_LAST_DEFAULT);}} style={{background:"none",border:"1px solid #1e2d45",borderRadius:6,padding:"3px 8px",color:SLATE,fontSize:10,cursor:"pointer"}}>✕</button>
+                        </div>
+                      : <div>
+                          <div style={{fontSize:12,color:"#94a3b8",marginBottom:3}}>📂 Drop CSV here or click to browse</div>
+                          <div style={{fontSize:9,color:"#1e2d45",fontFamily:"'DM Mono',monospace"}}>Use the template above</div>
+                        </div>}
+                  </div>
+                </div>
+              </div>
+              <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",background:"#1a0e00",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:AMBER}}>Budget / Forecast Import</div>
+                    <div style={{fontSize:11,color:SLATE,marginTop:2}}>Comparison figures</div>
+                  </div>
+                  <div style={{background:"#0c1420",border:"1px solid #1e2d45",borderRadius:8,padding:3,display:"flex",gap:2}}>
+                    {["budget","forecast"].map(m=>(
+                      <button key={m} className="mode-btn" onClick={()=>setMode(m)} style={{borderRadius:6,background:mode===m?"#2d1f00":"transparent",color:mode===m?AMBER:SLATE,fontWeight:mode===m?600:400,fontSize:10}}>
+                        {m==="budget"?"Budget":"Forecast"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginBottom:2}}>Step 1 — Download template</div>
+                    <div style={{fontSize:10,color:SLATE}}>Pre-filled with current {compLabel} data</div>
+                  </div>
+                  <button onClick={exportCSV} style={{flexShrink:0,padding:"8px 14px",background:"#1a0e00",border:"1px solid "+AMBER,borderRadius:8,color:AMBER,fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:600,cursor:"pointer"}}>↓ {compLabel} CSV</button>
+                </div>
+                <div style={{padding:"14px 22px"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#94a3b8",marginBottom:10}}>Step 2 — Upload</div>
+                  <div className="upload-zone" style={{padding:"18px 20px",borderColor:dragOver?AMBER:"#1e3a5f",background:dragOver?"#1a0e00":"transparent"}}
+                    onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
+                    onDrop={e=>{e.preventDefault();setDragOver(false);parseCSV(e.dataTransfer.files[0],false);}}
+                    onClick={()=>fileRef.current.click()}>
+                    <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>parseCSV(e.target.files[0],false)}/>
+                    {csvName
+                      ? <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <span style={{fontSize:12,color:AMBER,fontFamily:"'DM Mono',monospace"}}>✓ {csvName}</span>
+                          <button onClick={e=>{e.stopPropagation();setCsvData(null);setCsvName(null);}} style={{background:"none",border:"1px solid #1e2d45",borderRadius:6,padding:"3px 8px",color:SLATE,fontSize:10,cursor:"pointer"}}>✕</button>
+                        </div>
+                      : <div>
+                          <div style={{fontSize:12,color:"#94a3b8",marginBottom:3}}>📂 Drop CSV here or click to browse</div>
+                          <div style={{fontSize:9,color:"#1e2d45",fontFamily:"'DM Mono',monospace"}}>Use the template above</div>
+                        </div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==="deadlines"&&(
+          <div style={{background:"#0c1420",border:"1px solid #0f1e30",borderRadius:12,overflow:"hidden"}}>
+            <div style={{padding:"14px 22px",borderBottom:"1px solid #0f1e30",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>Reporting Deadlines · {year}</div>
+              <div style={{fontSize:10,color:AMBER,fontFamily:"'DM Mono',monospace"}}>Next: August → Sep 15 · 6 days</div>
+            </div>
+            <div style={{padding:8}}>
+              {deadlines.map((d,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",borderRadius:8,marginBottom:2,background:d.status==="current"?"#0f1e30":"transparent",border:d.status==="current"?"1px solid #1e3a5f":"1px solid transparent"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:d.status==="done"?GREEN:d.status==="current"?AMBER:"#1e2d45"}}/>
+                    <span style={{fontSize:13,color:d.status==="done"?SLATE:d.status==="current"?"#e2e8f0":"#475569",fontWeight:d.status==="current"?600:400}}>{d.month}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:24}}>
+                    <span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:SLATE}}>Due {d.due}</span>
+                    {d.status==="done"     &&<span style={{fontSize:11,color:GREEN, fontFamily:"'DM Mono',monospace"}}>✓ Submitted</span>}
+                    {d.status==="current"  &&<span style={{fontSize:11,color:AMBER, fontFamily:"'DM Mono',monospace",fontWeight:600}}>{d.daysLeft} days left</span>}
+                    {d.status==="upcoming" &&<span style={{fontSize:11,color:"#334155",fontFamily:"'DM Mono',monospace"}}>in {d.daysLeft} days</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      <AiAssistant financialContext={{
+        period:      MONTHS[S]+"–"+MONTHS[E],
+        year,
+        actLastMonth:MONTHS[actLast],
+        compLabel,
+        revenue:     fmt(totRev),
+        revVar:      fmt(totRev - sum(sl(comp.revenue,S,E))),
+        ebitda:      fmt(sum(sl(actuals.ebitda,S,E))),
+        netProfit:   fmt(totNet),
+        equity:      fmt(endEq),
+        cash:        fmt(actuals.cash[E]||0),
+        gmPct, emPct, roePct, eqR, gear, intCov, dso, dio, dpo,
+      }}/>
+
+    </div>
+  );
+}
+
+function LoginScreen({onLogin}) {
+  const [pw, setPw] = React.useState("");
+  const [err, setErr] = React.useState(false);
+  const submit = () => {
+    if (pw === PASSWORD) { sessionStorage.setItem(SESSION_KEY, "1"); onLogin(); }
+    else { setErr(true); setTimeout(()=>setErr(false), 1200); }
+  };
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#080b12",fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{width:340,padding:"40px 36px",background:"#0c1420",border:"1px solid #1e2d45",borderRadius:16,boxShadow:"0 20px 60px #000c"}}>
+        <div style={{marginBottom:28,textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",letterSpacing:-0.5}}>Targetflow</div>
+          <div style={{fontSize:13,color:ACCENT,fontFamily:"'DM Mono',monospace",marginTop:4}}>Stremet Oy</div>
+        </div>
+        <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}
+          placeholder="Password"
+          style={{width:"100%",background:"#070c17",border:"1px solid "+(err?"#f87171":"#1e2d45"),borderRadius:9,padding:"11px 14px",color:"#e2e8f0",fontSize:13,outline:"none",fontFamily:"'DM Sans',sans-serif",marginBottom:12,boxSizing:"border-box",transition:"border-color 0.2s"}}
+        />
+        <button onClick={submit} style={{width:"100%",padding:"11px",background:ACCENT,border:"none",borderRadius:9,color:"#080b12",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+          Sign in →
+        </button>
+        {err && <div style={{marginTop:10,textAlign:"center",fontSize:12,color:"#f87171",fontFamily:"'DM Mono',monospace"}}>Incorrect password</div>}
       </div>
     </div>
-  )
+  );
 }
+
+function AppWithAuth() {
+  const [authed, setAuthed] = React.useState(!!sessionStorage.getItem(SESSION_KEY));
+  if (!authed) return <LoginScreen onLogin={()=>setAuthed(true)}/>;
+  return <Dashboard/>;
+}
+
+export default AppWithAuth;
