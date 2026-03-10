@@ -32,7 +32,7 @@ const PASSWORD      = 'stremet2026!';
 const SESSION_KEY   = 'stremet_auth';
 const ACCENT        = '#818cf8';
 const CLIENT_NAME   = 'Stremet Oy';
-const ALLOWED_EMAILS = ['matias.soini@stremet.fi'];
+const ALLOWED_EMAILS = ['matias.soini@stremet.fi', "niklas.isaksson@targetflow.fi"];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const BLUE="#3b82f6",GREEN="#22c55e",AMBER="#f59e0b",RED="#f87171",PURPLE="#a78bfa",CYAN="#06b6d4",SLATE="#64748b";
@@ -1828,8 +1828,9 @@ function LoginScreen({onLogin}) {
             3. Enter the 6-digit code that appears
           </div>
           {qr&&<div style={{textAlign:"center",marginBottom:16}}>
-            <img src={`data:image/svg+xml;utf8,${encodeURIComponent(qr)}`}
-              style={{width:180,height:180,borderRadius:8,background:"#fff",padding:8,display:"inline-block"}}/>
+            <div style={{width:196,height:196,borderRadius:8,background:"#fff",padding:8,
+              display:"inline-block",lineHeight:0}}
+              dangerouslySetInnerHTML={{__html:qr}}/>
             <div style={{fontSize:10,color:"#334155",fontFamily:"'DM Mono',monospace",
               marginTop:8,wordBreak:"break-all",padding:"0 4px"}}>
               Manual key: <span style={{color:"#475569"}}>{secret}</span>
