@@ -1196,7 +1196,7 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
                          csvData,csvName,setCsvData,setCsvName,
                          mode,setMode,parseCSV,unmapped,exportActCSV,exportCSV,downloadTemplate,
                          fileRef,fileRefA,dragOver,setDragOver,dragOverA,setDragOverA,
-                         compLabel,entities,downloadTemplate}) {
+                         compLabel,entities}) {
   const [open,    setOpen]   = React.useState(false);
   const [view,    setView]   = React.useState("main");
   const [uploadType, setUploadType] = React.useState("actuals");
