@@ -1661,7 +1661,7 @@ function ForecastTab({actuals,comp,compLabel,mode,setMode,S,E,fcRevData,fcEqData
       <div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
           <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>ACT + {compLabel} Performance</div>
-          <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel} downloadTemplate={downloadTemplate}/>
+          <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel}/>
         </div>
         <div className="tf-grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:16}}>
           {[
@@ -1882,7 +1882,7 @@ function PLTab({actuals,comp,compLabel,mode,setMode,S,E,visMonths,monthTypes,plR
             <span style={{color:AMBER}}>{compLabel}</span>
             <span style={{color:RED}}>VAR</span>
           </div>
-          <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel} downloadTemplate={downloadTemplate}/>
+          <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel}/>
         </div>
       </div>
 
@@ -1988,7 +1988,7 @@ function BalanceTab({actuals,comp,compLabel,mode,setMode,S,E,visMonths,monthType
       {/* Header + switcher */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
         <div style={{fontSize:13,fontWeight:600,color:"#94a3b8"}}>Balance Sheet · {MONTHS_A[S]}–{MONTHS_A[E]} {year}</div>
-        <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel} downloadTemplate={downloadTemplate}/>
+        <ModeSwitcher mode={mode} setMode={setMode} compLabel={compLabel}/>
       </div>
 
       {/* KPI cards */}
@@ -2756,7 +2756,7 @@ function Dashboard() {
             userName={userEmail||"Board Member"}
             enabled={true}
           />
-          <SettingsMenu actData={actData} actName={actName} actLast={actLast} setActData={setActData} setActName={setActName} setActLast={setActLast} csvData={csvData} csvName={csvName} setCsvData={setCsvData} setCsvName={setCsvName} mode={mode} setMode={setMode} parseCSV={parseFile} unmapped={unmapped} exportActCSV={exportActCSV} exportCSV={exportCSV} fileRef={fileRef} fileRefA={fileRefA} dragOver={dragOver} setDragOver={setDragOver} dragOverA={dragOverA} setDragOverA={setDragOverA} compLabel={compLabel} entities={entities}/>
+          <SettingsMenu actData={actData} actName={actName} actLast={actLast} setActData={setActData} setActName={setActName} setActLast={setActLast} csvData={csvData} csvName={csvName} setCsvData={setCsvData} setCsvName={setCsvName} mode={mode} setMode={setMode} parseCSV={parseFile} unmapped={unmapped} exportActCSV={exportActCSV} exportCSV={exportCSV} fileRef={fileRef} fileRefA={fileRefA} dragOver={dragOver} setDragOver={setDragOver} dragOverA={dragOverA} setDragOverA={setDragOverA} compLabel={compLabel} entities={entities} downloadTemplate={downloadTemplate}/>
         </div>
       </div>
 
