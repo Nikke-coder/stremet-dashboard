@@ -2332,10 +2332,11 @@ function Dashboard() {
   const [selectedEnt, setSelectedEnt]= useState("e1");
   const [editingEnt,  setEditingEnt] = useState(null);
   // ── Persist entities to snapshot whenever they change ──────────────────────
-  const entitiesRef = React.useRef(null);
+  const snapshotReady = React.useRef(false); // true once loadSnapshot has completed
+  const entitiesRef   = React.useRef(null);
   React.useEffect(()=>{
-    // Skip first render (avoid overwriting snapshot with default on mount)
-    if(entitiesRef.current === null){ entitiesRef.current = entities; return; }
+    // Skip until snapshot has loaded (prevents overwriting saved data with defaults)
+    if(!snapshotReady.current) return;
     if(!supabase) return;
     const timer = setTimeout(async()=>{
       try {
@@ -2345,7 +2346,7 @@ function Dashboard() {
           updated_at: new Date().toISOString(),
         },{onConflict:"client"});
       } catch(e){ console.warn("Entities save failed", e); }
-    }, 800); // debounce 800ms
+    }, 800);
     return ()=>clearTimeout(timer);
   },[entities]);
 
@@ -2571,6 +2572,7 @@ function Dashboard() {
         if(s.year)      setYear(s.year);
         if(s.entities)  { try{ const e=JSON.parse(s.entities);  setEntities(e); }catch(e){} }
       } catch(e){ console.warn("Snapshot load failed", e); }
+      finally { snapshotReady.current = true; }
     })();
   },[]);
 
