@@ -1558,7 +1558,7 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
 
 
 // ── ForecastTab ───────────────────────────────────────────────────────────────
-function ForecastTab({actuals,comp,compLabel,mode,setMode,S,E,fcRevData,fcEqData,fcCashData}) {
+function ForecastTab({actuals,comp,compLabel,mode,setMode,S,E,fcRevData,fcEqData,fcCashData,downloadTemplate}) {
   const [scnItem, setScnItem] = React.useState("revenue");
   const [scnDir,  setScnDir]  = React.useState("decline");
   const [scnPct,  setScnPct]  = React.useState(10);
@@ -2331,6 +2331,25 @@ function Dashboard() {
   const [entities,    setEntities]   = useState([{id:"e1",name:"Stremet Oy",type:"operating",parentId:null,ownership:100,color:ACCENT}]);
   const [selectedEnt, setSelectedEnt]= useState("e1");
   const [editingEnt,  setEditingEnt] = useState(null);
+  // ── Persist entities to snapshot whenever they change ──────────────────────
+  const entitiesRef = React.useRef(null);
+  React.useEffect(()=>{
+    // Skip first render (avoid overwriting snapshot with default on mount)
+    if(entitiesRef.current === null){ entitiesRef.current = entities; return; }
+    if(!supabase) return;
+    const timer = setTimeout(async()=>{
+      try {
+        await supabase.from("client_snapshots").upsert({
+          client:   CLIENT_NAME,
+          entities: JSON.stringify(entities),
+          updated_at: new Date().toISOString(),
+        },{onConflict:"client"});
+      } catch(e){ console.warn("Entities save failed", e); }
+    }, 800); // debounce 800ms
+    return ()=>clearTimeout(timer);
+  },[entities]);
+
+
   // Load SheetJS once
   React.useEffect(()=>{
     if(!window._xlLoaded){
@@ -2504,11 +2523,11 @@ function Dashboard() {
 
 
   // ── Write snapshot to Supabase for superuser dashboard ───────────────────
-  const writeSnapshot = React.useCallback(async (data, actLast_, yr) => {
+  const writeSnapshot = React.useCallback(async (data, actLast_, yr, opts={}) => {
     if(!supabase||!data) return;
     const lastMonth = actLast_>=0 ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][actLast_] : null;
     try {
-      await supabase.from("client_snapshots").upsert({
+      const payload = {
         client:     CLIENT_NAME,
         updated_at: new Date().toISOString(),
         last_month: lastMonth,
@@ -2517,9 +2536,53 @@ function Dashboard() {
         net_profit: JSON.stringify(data.netProfit  ||[]),
         year:       yr||year,
         act_last:   actLast_,
-      }, {onConflict:"client"});
+        act_data:   JSON.stringify(data),
+        act_name:   opts.actName  || actName  || null,
+      };
+      // Only overwrite csv fields if explicitly provided
+      if(opts.csvData !== undefined) payload.csv_data = JSON.stringify(opts.csvData);
+      if(opts.csvName !== undefined) payload.csv_name = opts.csvName;
+      if(opts.mode    !== undefined) payload.mode     = opts.mode;
+      if(opts.entities!== undefined) payload.entities = JSON.stringify(opts.entities);
+      await supabase.from("client_snapshots").upsert(payload, {onConflict:"client"});
     } catch(e){ console.warn("Snapshot write failed", e); }
-  },[year]);
+  },[year, actName]);
+
+  // ── Load snapshot on mount ───────────────────────────────────────────────
+  const snapshotLoaded = React.useRef(false);
+  React.useEffect(()=>{
+    if(!supabase||snapshotLoaded.current) return;
+    snapshotLoaded.current = true;
+    (async()=>{
+      try {
+        const {data:rows} = await supabase
+          .from("client_snapshots")
+          .select("*")
+          .eq("client", CLIENT_NAME)
+          .limit(1);
+        if(!rows||!rows.length) return;
+        const s = rows[0];
+        if(s.act_data)  { try{ const d=JSON.parse(s.act_data);  setActData(d);  }catch(e){} }
+        if(s.act_name)  setActName(s.act_name);
+        if(s.act_last!=null) setActLast(s.act_last);
+        if(s.csv_data)  { try{ const d=JSON.parse(s.csv_data);  setCsvData(d);  }catch(e){} }
+        if(s.csv_name)  setCsvName(s.csv_name);
+        if(s.mode)      setMode(s.mode);
+        if(s.year)      setYear(s.year);
+        if(s.entities)  { try{ const e=JSON.parse(s.entities);  setEntities(e); }catch(e){} }
+      } catch(e){ console.warn("Snapshot load failed", e); }
+    })();
+  },[]);
+
+  // ── Confirm overwrite helper ─────────────────────────────────────────────
+  const confirmOverwrite = (isAct, fileYear) => {
+    const existing = isAct ? actData : csvData;
+    const existingName = isAct ? actName : csvName;
+    if(!existing) return true; // nothing to overwrite
+    const typeLabel = isAct ? "ACT" : (mode==="forecast"?"FC":"BUD");
+    const msg = `Replace existing ${typeLabel} data${existingName?" ("+existingName+")":""}${fileYear?" for "+fileYear:""}?`;
+    return window.confirm(msg);
+  };
 
   const exportCSV=()=>{
     const XL=window.XLSX;
@@ -2610,11 +2673,16 @@ function Dashboard() {
             const base = tr.fileType==="ACT" ? actBase : budBase;
             const data = {...base, ...tr.mapped};
             if(tr.fileType==="ACT"){
+              if(!confirmOverwrite(true, tr.fileYear||year)) return;
               setActData(data); setActName(file.name);
-              if(tr.actLast >= 0) { setActLast(tr.actLast); writeSnapshot(data, tr.actLast, tr.fileYear||year); }
+              if(tr.actLast >= 0) { setActLast(tr.actLast); writeSnapshot(data, tr.actLast, tr.fileYear||year, {actName:file.name}); }
             } else {
+              if(!confirmOverwrite(false, tr.fileYear||year)) return;
+              const newMode = tr.fileType==="FC"?"forecast":"budget";
               setCsvData(data); setCsvName(file.name);
-              if(tr.fileType==="FC") setMode("forecast"); else setMode("budget");
+              setMode(newMode);
+              // Save csv to snapshot
+              if(supabase){ supabase.from("client_snapshots").upsert({client:CLIENT_NAME,csv_data:JSON.stringify(data),csv_name:file.name,mode:newMode,updated_at:new Date().toISOString()},{onConflict:"client"}).catch(e=>console.warn(e)); }
             }
             if(tr.fileYear && tr.fileYear !== year) setYear(tr.fileYear);
             return;
@@ -2626,11 +2694,14 @@ function Dashboard() {
           const base=isAct?actBase:budBase;
           const merged={...base,...result.mapped};
           if(isAct){
+            if(!confirmOverwrite(true, year)) return;
             setActData(merged);
             setUnmapped(result.unmapped);
-            writeSnapshot(merged, newLast, year);
+            writeSnapshot(merged, newLast, year, {actName:file.name});
           } else {
+            if(!confirmOverwrite(false, year)) return;
             setCsvData(merged);
+            if(supabase){ supabase.from("client_snapshots").upsert({client:CLIENT_NAME,csv_data:JSON.stringify(merged),csv_name:file.name,mode,updated_at:new Date().toISOString()},{onConflict:"client"}).catch(e=>console.warn(e)); }
           }
         }catch(err){alert("Excel error: "+err.message);}
       };
@@ -2901,6 +2972,7 @@ function Dashboard() {
             actuals={actuals} comp={comp} compLabel={compLabel}
             mode={mode} setMode={setMode} S={S} E={E}
             fcRevData={fcRevData} fcEqData={fcEqData} fcCashData={fcCashData}
+            downloadTemplate={downloadTemplate}
           />
         )}
 
