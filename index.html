@@ -1,15 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#080b12" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
-    <title>Targetflow — Board Dashboard</title>
-    <style>html,body{background:#080b12;margin:0;padding:0;}</style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+import { createClient } from '@supabase/supabase-js'
+const URL = "https://jzqgndcrukggcwthxyrv.supabase.co"
+const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6cWduZGNydWtnZ2N3dGh4eXJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5NTA3NDIsImV4cCI6MjA4ODUyNjc0Mn0.6nSM1D1P36Did6pT27IBvO-tSQ2ihSrxhlZLlaEhvEc"
+export const supabase = createClient(URL, KEY)
+export const CLIENT = 'stremet'
