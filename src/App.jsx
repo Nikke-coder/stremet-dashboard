@@ -449,6 +449,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
     <>
       {isMobile && (
         <button
+          data-ai-float-btn
           onClick={() => setSidebarOpen(o => !o)}
           style={{
             position:"fixed", bottom:20, right:20, zIndex:600,
@@ -462,7 +463,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
         </button>
       )}
       {(!isMobile || sidebarOpen) && (
-    <div style={{position:"fixed",top:0,right:0,width:isMobile?"100vw":320,height:"100vh",
+    <div data-ai-sidebar style={{position:"fixed",top:0,right:0,width:isMobile?"100vw":320,height:"100vh",
       display:"flex",flexDirection:"column",background:"#060a14",
       borderLeft:"1px solid #0f1e30",zIndex:500}}>
 
@@ -2239,270 +2240,104 @@ function Dashboard() {
   const [actName,     setActName]    = useState(null);
   const [actLast,     setActLast]    = useState(ACT_LAST_DEFAULT);
 
-  // ── PDF / PPT Export (data-driven, no screenshots) ──────────────────────
+  // ── PDF / PPT Export (screenshot-based, sidebar hidden) ─────────────────
   React.useEffect(()=>{
     const loadScript = (url) => new Promise((res,rej)=>{ if(document.querySelector(`script[src="${url}"]`)){ res(); return; } const s=document.createElement("script"); s.src=url; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
 
     window._tfExport = async (type) => {
+      const TABS_ORDER  = ["group","kpis","forecast","pl","balance","cashflow","deadlines"];
+      const TAB_LABELS  = {group:"Group Structure",kpis:"KPIs",forecast:"Scenario Analysis",pl:"P&L",balance:"Balance Sheet",cashflow:"Cash Flow",deadlines:"Notifications"};
+      const mainEl      = document.querySelector("[data-export-main]");
+      const clientName  = mainEl?.dataset?.clientName || "Dashboard";
+      const yearLabel   = mainEl?.dataset?.exportYear  || new Date().getFullYear();
+
       const toast = document.createElement("div");
       toast.style.cssText="position:fixed;bottom:24px;right:24px;background:#0c1420;border:1px solid #3b82f6;border-radius:10px;padding:12px 20px;color:#60a5fa;font-family:'DM Mono',monospace;font-size:12px;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,0.6)";
       toast.textContent="⏳ Preparing export…"; document.body.appendChild(toast);
 
-      // ── Collect data from DOM dataset ──────────────────────────────────
-      const mainEl = document.querySelector("[data-export-main]");
-      const clientName = mainEl?.dataset?.clientName || CLIENT_NAME;
-      const yearLabel  = mainEl?.dataset?.exportYear  || year;
-
-      // Parse data from data attributes
-      const getData = (key) => { try { return JSON.parse(mainEl?.dataset?.[key]||"null"); } catch(e){ return null; } };
-      const actD   = getData("actData");
-      const csvD   = getData("csvData");
-      const entsD  = getData("entities");
-      const modeD  = mainEl?.dataset?.mode || mode;
-      const sM     = parseInt(mainEl?.dataset?.startM || startM);
-      const eM     = parseInt(mainEl?.dataset?.endM   || endM);
-      const aLast  = parseInt(mainEl?.dataset?.actLast ?? actLast);
-      const compLbl= modeD==="forecast"?"FC":"BUD";
-
-      const MONTHS_=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      const vis    = MONTHS_.slice(sM, eM+1);
-      const fmt_   = v => { if(v==null||isNaN(v)) return "—"; const a=Math.abs(v),sg=v<0?"−":""; return a>=1e6?sg+"€"+(a/1e6).toFixed(2)+"M":a>=1e3?sg+"€"+(a/1e3).toFixed(0)+"K":sg+"€"+a.toFixed(0); };
-      const sum_   = a => (a||[]).reduce((s,v)=>s+(v||0),0);
-      const sl_    = (a,s,e) => (a||[]).slice(s,e+1);
-      const pct_   = (a,b) => (b&&b!==0) ? ((a/b)*100).toFixed(1)+"%" : "—";
-
-      // ── Build table data ───────────────────────────────────────────────
-      const mHdr   = [""].concat(vis).concat(["Total / Avg"]);
-
-      // KPIs
-      const kpiRows = actD ? [
-        ["Revenue",    ...sl_(actD.revenue,sM,eM).map(fmt_),    fmt_(sum_(sl_(actD.revenue,sM,eM)))],
-        ["Gross Profit",...sl_(actD.grossProfit,sM,eM).map(fmt_),fmt_(sum_(sl_(actD.grossProfit,sM,eM)))],
-        ["EBITDA",     ...sl_(actD.ebitda,sM,eM).map(fmt_),     fmt_(sum_(sl_(actD.ebitda,sM,eM)))],
-        ["Net Profit", ...sl_(actD.netProfit,sM,eM).map(fmt_),  fmt_(sum_(sl_(actD.netProfit,sM,eM)))],
-        ["GM%",        ...sl_(actD.revenue,sM,eM).map((v,i)=>pct_((sl_(actD.grossProfit,sM,eM)[i]||0),v)), pct_(sum_(sl_(actD.grossProfit,sM,eM)),sum_(sl_(actD.revenue,sM,eM)))],
-        ["EBITDA%",    ...sl_(actD.revenue,sM,eM).map((v,i)=>pct_((sl_(actD.ebitda,sM,eM)[i]||0),v)),     pct_(sum_(sl_(actD.ebitda,sM,eM)),sum_(sl_(actD.revenue,sM,eM)))],
-      ] : [["No ACT data loaded"]];
-
-      // P&L
-      const plDefs = [
-        {label:"Revenue",       k:"revenue",    bold:true},
-        {label:"Cost of Goods", k:"cogs",       indent:true},
-        {label:"Gross Profit",  k:"grossProfit",bold:true},
-        {label:"OpEx",          k:"opex",       indent:true},
-        {label:"EBITDA",        k:"ebitda",     bold:true},
-        {label:"Depreciation",  k:"depAmort",   indent:true},
-        {label:"EBIT",          k:"ebit",       bold:true},
-        {label:"Fin. Expenses", k:"finExpenses",indent:true},
-        {label:"EBT",           k:"ebt"},
-        {label:"Tax",           k:"tax",        indent:true},
-        {label:"Net Profit",    k:"netProfit",  bold:true},
-      ];
-      const plRows = actD ? plDefs.map(r=>{
-        const arr = actD[r.k]||[];
-        const label = (r.indent?"  ":"")+r.label;
-        return [label, ...sl_(arr,sM,eM).map(fmt_), fmt_(sum_(sl_(arr,sM,eM)))];
-      }) : [["No ACT data"]];
-
-      // Balance Sheet (end-of-period values)
-      const totCurr_ = MONTHS_.map((_,i)=>(actD?.inventory?.[i]||0)+(actD?.receivables?.[i]||0)+(actD?.cash?.[i]||0)+(actD?.otherCA?.[i]||0));
-      const totAss_  = MONTHS_.map((_,i)=>(actD?.tangibles?.[i]||0)+totCurr_[i]);
-      const totLiab_ = MONTHS_.map((_,i)=>(actD?.ltDebt?.[i]||0)+(actD?.stDebt?.[i]||0)+(actD?.payables?.[i]||0)+(actD?.otherCL?.[i]||0));
-      const balRows = actD ? [
-        ["— ASSETS —"],
-        ["  Tangible assets",  ...sl_(actD.tangibles||[],sM,eM).map(fmt_),  ""],
-        ["  Inventory",        ...sl_(actD.inventory||[],sM,eM).map(fmt_),  ""],
-        ["  Receivables",      ...sl_(actD.receivables||[],sM,eM).map(fmt_),""],
-        ["  Cash",             ...sl_(actD.cash||[],sM,eM).map(fmt_),       ""],
-        ["TOTAL ASSETS",       ...sl_(totAss_,sM,eM).map(fmt_),             ""],
-        ["— EQUITY & LIAB. —"],
-        ["  Total Equity",     ...sl_(actD.equity||[],sM,eM).map(fmt_),     ""],
-        ["  LT Debt",          ...sl_(actD.ltDebt||[],sM,eM).map(fmt_),     ""],
-        ["  ST Debt",          ...sl_(actD.stDebt||[],sM,eM).map(fmt_),     ""],
-        ["  Payables",         ...sl_(actD.payables||[],sM,eM).map(fmt_),   ""],
-        ["TOTAL LIABILITIES",  ...sl_(totLiab_,sM,eM).map(fmt_),            ""],
-      ] : [["No ACT data"]];
-
-      // Cash Flow
-      const cfDRec_   = sl_(actD?.receivables||[],sM,eM).map((v,i,a)=>i===0?0:((a[i-1]||0)-v));
-      const cfDInv_   = sl_(actD?.inventory||[],sM,eM).map((v,i,a)=>i===0?0:((a[i-1]||0)-v));
-      const cfDPay_   = sl_(actD?.payables||[],sM,eM).map((v,i,a)=>i===0?0:(v-(a[i-1]||0)));
-      const ebitdaSl_ = sl_(actD?.ebitda||[],sM,eM);
-      const cfOpArr_  = ebitdaSl_.map((v,i)=>v+cfDRec_[i]+cfDInv_[i]+cfDPay_[i]);
-      const cfInvArr_ = sl_(actD?.tangibles||[],sM,eM).map((v,i,a)=>i===0?0:((a[i-1]||0)-v));
-      const cfFinArr_ = sl_(actD?.ltDebt||[],sM,eM).map((v,i,a)=>i===0?0:(v-(a[i-1]||0)));
-      const netCF_    = cfOpArr_.map((v,i)=>v+cfInvArr_[i]+cfFinArr_[i]);
-      const cfRows = actD ? [
-        ["EBITDA",           ...ebitdaSl_.map(fmt_),  fmt_(sum_(ebitdaSl_))],
-        ["  Δ Receivables",  ...cfDRec_.map(fmt_),    fmt_(sum_(cfDRec_))],
-        ["  Δ Inventory",    ...cfDInv_.map(fmt_),    fmt_(sum_(cfDInv_))],
-        ["  Δ Payables",     ...cfDPay_.map(fmt_),    fmt_(sum_(cfDPay_))],
-        ["OPERATIVE CF",     ...cfOpArr_.map(fmt_),   fmt_(sum_(cfOpArr_))],
-        ["INVESTMENT CF",    ...cfInvArr_.map(fmt_),  fmt_(sum_(cfInvArr_))],
-        ["FINANCING CF",     ...cfFinArr_.map(fmt_),  fmt_(sum_(cfFinArr_))],
-        ["NET CASH CHANGE",  ...netCF_.map(fmt_),     fmt_(sum_(netCF_))],
-      ] : [["No ACT data"]];
-
-      // Scenario (ACT vs BUD/FC)
-      const scenRows = actD && csvD ? [
-        ["",          "ACT",                                  compLbl,                               "Variance"],
-        ["Revenue",   fmt_(sum_(sl_(actD.revenue,sM,eM))),   fmt_(sum_(sl_(csvD.revenue,sM,eM))),   fmt_(sum_(sl_(actD.revenue,sM,eM))-sum_(sl_(csvD.revenue,sM,eM)))],
-        ["Gr.Profit", fmt_(sum_(sl_(actD.grossProfit,sM,eM))),fmt_(sum_(sl_(csvD.grossProfit||[],sM,eM))),fmt_(sum_(sl_(actD.grossProfit,sM,eM))-sum_(sl_(csvD.grossProfit||[],sM,eM)))],
-        ["EBITDA",    fmt_(sum_(sl_(actD.ebitda,sM,eM))),    fmt_(sum_(sl_(csvD.ebitda||[],sM,eM))), fmt_(sum_(sl_(actD.ebitda,sM,eM))-sum_(sl_(csvD.ebitda||[],sM,eM)))],
-        ["Net Profit",fmt_(sum_(sl_(actD.netProfit,sM,eM))), fmt_(sum_(sl_(csvD.netProfit||[],sM,eM))),fmt_(sum_(sl_(actD.netProfit,sM,eM))-sum_(sl_(csvD.netProfit||[],sM,eM)))],
-      ] : [["Load both ACT and "+compLbl+" to compare"]];
-
-      // Group structure
-      const groupRows = entsD ? entsD.map(e=>{
-        const parent = entsD.find(p=>p.id===e.parentId);
-        const subs   = entsD.filter(c=>c.parentId===e.id).length;
-        return [e.name, e.type||"—", parent?parent.name:"— (root)", (e.ownership||100)+"%", subs>0?subs+" subsidiaries":"—"];
-      }) : [["No group structure defined"]];
+      // ── Hide sidebar before capturing ──────────────────────────────────
+      const sidebar = document.querySelector("[data-ai-sidebar]");
+      const sidebarWasVisible = sidebar && sidebar.style.display !== "none";
+      if(sidebar) sidebar.style.display = "none";
+      const floatBtn = document.querySelector("[data-ai-float-btn]");
+      if(floatBtn) floatBtn.style.display = "none";
 
       try {
-        toast.textContent="📦 Loading libraries…";
-        if(type==="pdf"){
-          await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-          await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
-        } else {
-          await loadScript("https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js");
+        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+        if(type==="pdf") await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+        if(type==="ppt") await loadScript("https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js");
+
+        if(!mainEl){ toast.textContent="❌ Export target not found"; setTimeout(()=>toast.remove(),2000); return; }
+
+        const captured = [];
+        const allTabBtns = Array.from(document.querySelectorAll(".tab-btn"));
+        for(const tabId of TABS_ORDER){
+          toast.textContent=`📸 Capturing ${TAB_LABELS[tabId]}…`;
+          const btn = allTabBtns.find(b=>b.textContent.trim()===TAB_LABELS[tabId]);
+          if(btn){ btn.click(); await new Promise(r=>setTimeout(r,500)); }
+          const canvas = await window.html2canvas(mainEl,{
+            backgroundColor:"#080b12", scale:1.5, useCORS:true, logging:false,
+            width:mainEl.offsetWidth, height:Math.min(mainEl.scrollHeight,2800),
+            windowWidth:mainEl.offsetWidth, scrollX:0, scrollY:0
+          });
+          captured.push({label:TAB_LABELS[tabId], dataUrl:canvas.toDataURL("image/jpeg",0.90), w:canvas.width, h:canvas.height});
         }
 
+        toast.textContent=`📦 Building ${type.toUpperCase()}…`;
+        await new Promise(r=>setTimeout(r,80));
         const fname = clientName.replace(/\s+/g,"_")+"_"+yearLabel+"_Board_Report";
-        const periodLabel = MONTHS_[sM]+" – "+MONTHS_[eM]+" "+yearLabel;
-        const BG="#080B12", HDR="#0C1420", ACC="#3B82F6", WHT="#E2E8F0", MUT="#64748B", AMB="#F59E0B", GRN="#22C55E";
-
-        // ── SECTIONS ──────────────────────────────────────────────────────
-        const sections = [
-          {title:"KPIs",             subtitle:"Key Performance Indicators",  hdr:mHdr, rows:kpiRows},
-          {title:"P&L",              subtitle:"Profit & Loss Statement",      hdr:mHdr, rows:plRows},
-          {title:"Balance Sheet",    subtitle:"Balance Sheet",               hdr:mHdr, rows:balRows},
-          {title:"Cash Flow",        subtitle:"Cash Flow Statement",         hdr:mHdr, rows:cfRows},
-          {title:"Scenario Analysis",subtitle:"ACT vs "+compLbl,            hdr:["","ACT",compLbl,"Variance"], rows:scenRows},
-          {title:"Group Structure",  subtitle:"Group Structure",             hdr:["Entity","Type","Parent","Ownership","Subsidiaries"], rows:groupRows},
-        ];
 
         if(type==="pdf"){
-          toast.textContent="📄 Building PDF…";
           const {jsPDF} = window.jspdf;
-          const pdf = new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+          const pdf = new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
           const PW=297, PH=210;
-
-          sections.forEach((sec,si)=>{
-            if(si>0) pdf.addPage();
-            // Background
+          captured.forEach((c,i)=>{
+            if(i>0) pdf.addPage();
             pdf.setFillColor(8,11,18); pdf.rect(0,0,PW,PH,"F");
-            // Header bar
-            pdf.setFillColor(12,20,32); pdf.rect(0,0,PW,16,"F");
-            pdf.setDrawColor(30,45,69); pdf.setLineWidth(0.3); pdf.line(0,16,PW,16);
-            // Client name + section
-            pdf.setFont("helvetica","bold"); pdf.setFontSize(9); pdf.setTextColor(226,232,240);
-            pdf.text(clientName,8,10);
-            pdf.setFont("helvetica","normal"); pdf.setFontSize(8); pdf.setTextColor(100,116,139);
-            pdf.text(sec.title+" · "+periodLabel,8,14.5);
-            // Page number
-            pdf.setFontSize(8); pdf.setTextColor(71,85,105);
-            pdf.text(String(si+1)+"/"+String(sections.length),PW-8,10,{align:"right"});
-            // Accent line
-            pdf.setDrawColor(59,130,246); pdf.setLineWidth(0.8); pdf.line(0,16,PW,16);
-
-            // Table
-            const colCount = sec.hdr.length;
-            const colW = colCount<=5 ? (PW-16)/(colCount) : null;
-            pdf.autoTable({
-              startY:20,
-              head:[sec.hdr],
-              body:sec.rows.filter(r=>r.length>1),
-              margin:{left:8, right:8},
-              columnStyles: colW ? Object.fromEntries(sec.hdr.map((_,i)=>[ i,{cellWidth:colW}])) : {},
-              styles:{
-                font:"helvetica", fontSize:7.5, cellPadding:2,
-                textColor:[148,163,184], fillColor:[8,11,18],
-                lineColor:[20,30,48], lineWidth:0.2,
-                halign:"right",
-              },
-              headStyles:{
-                fillColor:[12,20,32], textColor:[226,232,240],
-                fontStyle:"bold", fontSize:7.5, halign:"center",
-              },
-              alternateRowStyles:{fillColor:[10,15,26]},
-              columnStyles:{0:{halign:"left", textColor:[203,213,225]}},
-              didParseCell:(d)=>{
-                if(d.row.raw && d.row.raw[0] && (d.row.raw[0].startsWith("—")||d.row.raw[0].startsWith("TOTAL")||d.row.raw[0].startsWith("NET")||d.row.raw[0].startsWith("OPERATIVE")||d.row.raw[0].startsWith("EBITDA")||d.row.raw[0].startsWith("Revenue"))){
-                  d.cell.styles.fontStyle="bold";
-                  d.cell.styles.textColor=[226,232,240];
-                  d.cell.styles.fillColor=[15,23,42];
-                }
-              },
-            });
+            pdf.setFillColor(12,20,32); pdf.rect(0,0,PW,13,"F");
+            pdf.setDrawColor(59,130,246); pdf.setLineWidth(0.4); pdf.line(0,13,PW,13);
+            pdf.setTextColor(226,232,240); pdf.setFontSize(8.5); pdf.setFont("helvetica","bold");
+            pdf.text(clientName+" · "+c.label, 7, 8.5);
+            pdf.setFont("helvetica","normal"); pdf.setTextColor(71,85,105);
+            pdf.text(yearLabel+"  "+String(i+1)+"/"+String(captured.length), PW-7, 8.5, {align:"right"});
+            const mg=5, top=15, avW=PW-mg*2, avH=PH-top-mg;
+            const sc=Math.min(avW/c.w, avH/c.h);
+            const dW=c.w*sc, dH=c.h*sc, x=mg+(avW-dW)/2, y=top+(avH-dH)/2;
+            pdf.addImage(c.dataUrl,"JPEG",x,y,dW,dH);
           });
-
-          // Cover / title page first — insert at beginning (we'll just add it last and note)
           pdf.save(fname+".pdf");
-
         } else {
-          toast.textContent="📊 Building PPTX…";
           const PptxGen = window.PptxGenJS || window.pptxgen;
           const pptx = new PptxGen();
           pptx.layout = "LAYOUT_WIDE";
           const SW=13.33, SH=7.5;
-
-          // Cover slide
-          const cover = pptx.addSlide();
-          cover.background = {color:"080B12"};
-          cover.addShape("rect",{x:0,y:0,w:SW,h:SH,fill:{color:"080B12"}});
-          // Accent line center
-          cover.addShape("rect",{x:2,y:3.55,w:9.33,h:0.03,fill:{color:"3B82F6"}});
-          cover.addText(clientName,{x:0,y:2.2,w:SW,h:1,fontSize:36,color:"E2E8F0",bold:true,align:"center",fontFace:"Arial"});
-          cover.addText("Board Report · "+yearLabel,{x:0,y:3.2,w:SW,h:0.5,fontSize:16,color:"3B82F6",align:"center",fontFace:"Arial"});
-          cover.addText(periodLabel,{x:0,y:3.75,w:SW,h:0.4,fontSize:12,color:"64748B",align:"center",fontFace:"Arial"});
-          cover.addText("Prepared by Targetflow",{x:0,y:SH-0.5,w:SW,h:0.35,fontSize:9,color:"334155",align:"center",fontFace:"Arial"});
-
-          sections.forEach((sec)=>{
+          for(const c of captured){
             const slide = pptx.addSlide();
             slide.background = {color:"080B12"};
-
-            // Header
-            slide.addShape("rect",{x:0,y:0,w:SW,h:0.55,fill:{color:"0C1420"},line:{color:"1E3A5F",w:0.5}});
-            slide.addShape("rect",{x:0,y:0.55,w:SW,h:0.03,fill:{color:"3B82F6"}});
-            slide.addText(clientName+" · "+sec.title,{x:0.2,y:0.1,w:8,h:0.35,fontSize:11,color:"E2E8F0",bold:true,fontFace:"Arial"});
-            slide.addText(periodLabel,{x:SW-3,y:0.1,w:2.8,h:0.35,fontSize:9,color:"475569",align:"right",fontFace:"Arial"});
-
-            // Table
-            const allRows = [sec.hdr, ...sec.rows.filter(r=>r.length>1)];
-            const colW_ = (SW-0.4)/sec.hdr.length;
-            const rowH_ = Math.min(0.28, (SH-1.0)/allRows.length);
-
-            const tblData = allRows.map((row,ri)=>
-              row.map((cell,ci)=>({
-                text: String(cell||""),
-                options:{
-                  color: ri===0?"E2E8F0": ci===0?"CBD5E1":"94A3B8",
-                  bold:  ri===0 || (ci===0 && (String(row[0]).startsWith("TOTAL")||String(row[0]).startsWith("NET")||String(row[0]).startsWith("EBITDA")||String(row[0]).startsWith("Revenue")||String(row[0]).startsWith("OPERATIVE"))),
-                  align: ci===0?"left":"right",
-                  fontSize:8.5,
-                  fill:{color: ri===0?"0C1420": ri%2===0?"0A0F1A":"080B12"},
-                }
-              }))
-            );
-
-            slide.addTable(tblData,{
-              x:0.2, y:0.68,
-              w:SW-0.4,
-              rowH:rowH_,
-              fontFace:"Arial",
-              border:{type:"solid",color:"1E2D45",pt:0.3},
-            });
-          });
-
+            slide.addShape("rect",{x:0,y:0,w:SW,h:0.42,fill:{color:"0C1420"},line:{color:"1E2D45",w:0.5}});
+            slide.addShape("rect",{x:0,y:0.42,w:SW,h:0.025,fill:{color:"3B82F6"}});
+            slide.addText(clientName+" · "+c.label, {x:0.18,y:0.07,w:8,h:0.28,fontSize:9,color:"94A3B8",bold:true,fontFace:"Arial"});
+            slide.addText(String(yearLabel), {x:SW-1.5,y:0.07,w:1.3,h:0.28,fontSize:8,color:"475569",fontFace:"Arial",align:"right"});
+            const mg=0.12, top=0.5, avW=SW-mg*2, avH=SH-top-mg;
+            const sc=Math.min(avW/c.w, avH/c.h);
+            const dW=c.w*sc, dH=c.h*sc, x=mg+(avW-dW)/2, y=top+(avH-dH)/2;
+            const b64 = c.dataUrl.replace(/^data:image\/jpeg;base64,/,"");
+            slide.addImage({data:"image/jpeg;base64,"+b64, x, y, w:dW, h:dH});
+          }
           await pptx.writeFile({fileName:fname+".pptx"});
         }
-
         toast.textContent="✅ Export ready!";
       } catch(err){ console.error(err); toast.textContent="❌ Export failed: "+err.message; }
-      setTimeout(()=>toast.remove(),4000);
+
+      // ── Restore sidebar ──────────────────────────────────────────────────
+      if(sidebar && sidebarWasVisible) sidebar.style.display = "";
+      if(floatBtn) floatBtn.style.display = "";
+
+      setTimeout(()=>toast.remove(),3500);
     };
   },[]);
+
+
 
 
 
