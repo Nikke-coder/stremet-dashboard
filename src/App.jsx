@@ -2274,7 +2274,7 @@ function Dashboard() {
         for(const tabId of TABS_ORDER){
           toast.textContent=`📸 Capturing ${TAB_LABELS[tabId]}…`;
           const btn = allTabBtns.find(b=>b.textContent.trim()===TAB_LABELS[tabId]);
-          if(btn){ btn.click(); await new Promise(r=>setTimeout(r,1800)); }
+          if(btn){ btn.click(); await new Promise(r=>setTimeout(r,3500)); }
           const canvas = await window.html2canvas(mainEl,{
             backgroundColor:"#080b12", scale:1.5, useCORS:true, logging:false,
             width:mainEl.offsetWidth, height:Math.min(mainEl.scrollHeight,2800),
