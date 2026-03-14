@@ -474,7 +474,7 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
   const getUsage = async () => {
     if(!supabase) return 0;
     const [{ data: usageData }, { data: credData }] = await Promise.all([
-      supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).single(),
+      supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).maybeSingle(),
       supabase.from("ai_credits").select("balance").eq("client", CLIENT_NAME).maybeSingle(),
     ]);
     const count = usageData?.count || 0;
@@ -523,7 +523,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
     if(booted) return;
     setBooted(true);
     const currentUsage = await getUsage();
-    const bal = credits ?? (await supabase.from("ai_credits").select("balance").eq("client",CLIENT_NAME).single().then(r=>r.data?.balance??0));
+    const bal = credits ?? (await supabase.from("ai_credits").select("balance").eq("client",CLIENT_NAME).maybeSingle().then(r=>r.data?.balance??0));
     if(bal <= 0) {
       setMessages([{role:"assistant",content:"No credits remaining. Top up your balance in Settings → Billing to continue using EBITDA-9000.",auto:true,err:true}]);
       setCapHit(true);
