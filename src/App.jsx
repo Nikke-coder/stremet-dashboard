@@ -318,13 +318,154 @@ const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast}) => (
   </div>
 );
 
+// ── BillingView ──────────────────────────────────────────────────────────────
+function BillingView({clientName, supabase, onClose}) {
+  const [credits,  setCredits]  = React.useState(null);
+  const [history,  setHistory]  = React.useState([]);
+  const [buying,   setBuying]   = React.useState(null);
+  const STRIPE_KEY = "PASTE_STRIPE_PUBLISHABLE_KEY";
+
+  const PACKAGES = [
+    {id:"spark",   name:"Spark",   credits:200,  price:"€10", priceId:"price_spark_10eur",   desc:"200 questions",  color:"#60a5fa"},
+    {id:"insight", name:"Insight", credits:400,  price:"€20", priceId:"price_insight_20eur", desc:"400 questions",  color:"#a78bfa"},
+    {id:"oracle",  name:"Oracle",  credits:1000, price:"€50", priceId:"price_oracle_50eur",  desc:"1 000 questions",color:"#2dd4bf"},
+  ];
+
+  React.useEffect(()=>{
+    if(!supabase) return;
+    const load = async () => {
+      const [{data:cr},{data:tx}] = await Promise.all([
+        supabase.from("ai_credits").select("balance").eq("client",clientName).single(),
+        supabase.from("ai_transactions").select("*").eq("client",clientName).order("created_at",{ascending:false}).limit(10),
+      ]);
+      setCredits(cr?.balance ?? 0);
+      setHistory(tx || []);
+    };
+    load();
+  },[]);
+
+  const handleBuy = async (pkg) => {
+    setBuying(pkg.id);
+    // Load Stripe.js
+    if(!window.Stripe) {
+      await new Promise((res,rej)=>{
+        const s=document.createElement("script");
+        s.src="https://js.stripe.com/v3/";
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    try {
+      // Create checkout session via your Vercel function
+      const resp = await fetch("/api/create-checkout", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({package: pkg.id, client: clientName}),
+      });
+      const {url} = await resp.json();
+      if(url) window.location.href = url;
+      else alert("Could not start checkout. Please try again.");
+    } catch(e) {
+      alert("Checkout error: "+e.message);
+    }
+    setBuying(null);
+  };
+
+  const fmt = (iso) => new Date(iso).toLocaleDateString("fi-FI",{day:"2-digit",month:"2-digit",year:"numeric"});
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",overflowY:"auto"}}>
+      {/* Header */}
+      <div style={{padding:"14px 18px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Billing & Credits
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:18,cursor:"pointer",padding:"2px 6px"}}>✕</button>
+      </div>
+
+      <div style={{padding:"16px 18px",flex:1}}>
+
+        {/* Balance */}
+        <div style={{background:"linear-gradient(135deg,#0f2040,#0a1628)",border:"1px solid #1e3a5f",borderRadius:10,padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontSize:10,color:"#475569",fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>Current balance</div>
+          <div style={{fontSize:28,fontWeight:700,color:credits===null?"#334155":credits>0?"#60a5fa":"#f87171",fontFamily:"'DM Mono',monospace"}}>
+            {credits===null?"…":credits}
+            <span style={{fontSize:12,fontWeight:400,color:"#475569",marginLeft:6}}>credits</span>
+          </div>
+          <div style={{fontSize:10,color:"#334155",marginTop:4}}>1 credit = 1 question · €0.05 / credit</div>
+        </div>
+
+        {/* Packages */}
+        <div style={{fontSize:10,color:"#475569",fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Top up</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+          {PACKAGES.map(pkg=>(
+            <button key={pkg.id} onClick={()=>handleBuy(pkg)} disabled={buying===pkg.id}
+              style={{background:"#0a1220",border:"1px solid #1e2d45",borderRadius:9,padding:"12px 14px",
+                cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",
+                transition:"border-color 0.15s",outline:"none"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=pkg.color}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="#1e2d45"}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:pkg.color,flexShrink:0}}/>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{pkg.name}</div>
+                  <div style={{fontSize:10,color:"#475569",fontFamily:"'DM Mono',monospace"}}>{pkg.desc}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:14,fontWeight:700,color:pkg.color}}>{pkg.price}</span>
+                {buying===pkg.id
+                  ? <span style={{fontSize:10,color:"#475569"}}>…</span>
+                  : <span style={{fontSize:11,color:"#334155"}}>→</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* History */}
+        {history.length>0&&(
+          <>
+            <div style={{fontSize:10,color:"#475569",fontFamily:"'DM Mono',monospace",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Recent transactions</div>
+            <div style={{border:"1px solid #0f1e30",borderRadius:8,overflow:"hidden"}}>
+              {history.map((tx,i)=>(
+                <div key={tx.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                  padding:"7px 12px",borderBottom:i<history.length-1?"1px solid #0f1e30":"none",
+                  fontSize:11}}>
+                  <span style={{color:"#64748b"}}>{fmt(tx.created_at)} · {tx.type==="purchase"?"Purchase ("+tx.package+")":"Used"}</span>
+                  <span style={{color:tx.credits>0?"#4ade80":"#64748b",fontFamily:"'DM Mono',monospace",fontWeight:600}}>
+                    {tx.credits>0?"+":""}{tx.credits}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{marginTop:16,padding:"10px 12px",background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:8}}>
+          <div style={{fontSize:10,color:"#6366f1",fontFamily:"'DM Mono',monospace"}}>ℹ Credits never expire · Secure payment via Stripe · ALV 25.5% sis.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSidebarOpen=()=>{}}) {
   const [messages, setMessages] = useState([]);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
   const [booted,   setBooted]   = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
+
+  React.useEffect(()=>{
+    const handler = () => setShowBilling(true);
+    window.addEventListener("open-billing", handler);
+    return () => window.removeEventListener("open-billing", handler);
+  },[]);
   const [usage,    setUsage]    = useState(0);
   const [capHit,   setCapHit]   = useState(false);
+  const [credits,  setCredits]  = useState(null);  // null = loading
   const bottomRef = useRef();
   const inputRef  = useRef();
   const MONTHLY_CAP = 100;
@@ -332,23 +473,36 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
 
   const getUsage = async () => {
     if(!supabase) return 0;
-    const { data } = await supabase.from("ai_usage")
-      .select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).single();
-    const count = data?.count || 0;
+    const [{ data: usageData }, { data: credData }] = await Promise.all([
+      supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).single(),
+      supabase.from("ai_credits").select("balance").eq("client", CLIENT_NAME).single(),
+    ]);
+    const count = usageData?.count || 0;
+    const bal   = credData?.balance ?? 0;
     setUsage(count);
-    if(count >= MONTHLY_CAP) setCapHit(true);
+    setCredits(bal);
+    if(bal <= 0) setCapHit(true);
     return count;
   };
 
   const incrementUsage = async () => {
     if(!supabase) return;
-    await supabase.from("ai_usage").upsert({
-      client: CLIENT_NAME,
-      month: thisMonth(),
-      count: usage + 1,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "client,month", ignoreDuplicates: false });
+    await Promise.all([
+      supabase.from("ai_usage").upsert({
+        client: CLIENT_NAME, month: thisMonth(),
+        count: usage + 1, updated_at: new Date().toISOString()
+      }, { onConflict: "client,month", ignoreDuplicates: false }),
+      supabase.from("ai_credits").upsert({
+        client: CLIENT_NAME,
+        balance: Math.max(0, (credits ?? 1) - 1),
+        updated_at: new Date().toISOString()
+      }, { onConflict: "client" }),
+      supabase.from("ai_transactions").insert({
+        client: CLIENT_NAME, credits: -1, type: "usage",
+      }),
+    ]);
     setUsage(u => u + 1);
+    setCredits(c => Math.max(0, (c ?? 1) - 1));
   };
 
   const SYSTEM = `You are EBITDA-9000, a razor-sharp AI financial advisor embedded in a board-level dashboard called Targetflow. You have a dry sense of humour but always back it up with precise numbers. You have full access to the company's current financial data below. Flag anomalies, identify trends, suggest actions, answer questions. Be direct — board members don't need hand-holding. Use €K/€M notation, percentages, and month names. Keep responses under 200 words unless asked for detail. Occasionally make a light finance pun but never at the expense of accuracy.
@@ -369,8 +523,10 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
     if(booted) return;
     setBooted(true);
     const currentUsage = await getUsage();
-    if(currentUsage >= MONTHLY_CAP) {
-      setMessages([{role:"assistant",content:"EBITDA-9000 has reached its monthly query limit. It will reset on the 1st of next month.",auto:true,err:true}]);
+    const bal = credits ?? (await supabase.from("ai_credits").select("balance").eq("client",CLIENT_NAME).single().then(r=>r.data?.balance??0));
+    if(bal <= 0) {
+      setMessages([{role:"assistant",content:"No credits remaining. Top up your balance in Settings → Billing to continue using EBITDA-9000.",auto:true,err:true}]);
+      setCapHit(true);
       setLoading(false);
       return;
     }
@@ -402,8 +558,8 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
   const send = async () => {
     const text = input.trim();
     if(!text || loading) return;
-    if(capHit || usage >= MONTHLY_CAP) {
-      setMessages(prev=>[...prev,{role:"assistant",content:"Monthly query limit reached. Resets on the 1st of next month.",err:true}]);
+    if(capHit || (credits !== null && credits <= 0)) {
+      setMessages(prev=>[...prev,{role:"assistant",content:"No credits remaining. Top up in Settings → Billing.",err:true}]);
       return;
     }
     setInput("");
@@ -467,6 +623,8 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
       display:"flex",flexDirection:"column",background:"#060a14",
       borderLeft:"1px solid #0f1e30",zIndex:500}}>
 
+      {showBilling&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onClose={()=>setShowBilling(false)}/>}
+      {!showBilling&&<>
       {/* Header */}
       <div style={{padding:"14px 18px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",background:"linear-gradient(135deg,#0a1628,#060e1e)",flexShrink:0,height:56}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -476,7 +634,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
             <div style={{fontSize:9,color:loading?AMBER:GREEN,fontFamily:"'DM Mono',monospace"}}>{loading?"Crunching numbers…":"● Online"}</div>
           </div>
         </div>
-        {usage>0&&<div style={{fontSize:9,fontFamily:"'DM Mono',monospace",color:"#334155"}}>{usage}/{MONTHLY_CAP}</div>}
+        {credits!==null&&<div style={{fontSize:9,fontFamily:"'DM Mono',monospace",color:credits>20?"#334155":credits>5?"#f59e0b":"#f87171",fontWeight:credits<=5?700:400}}>{credits} cr</div>}
         {isMobile && (
           <button onClick={()=>setSidebarOpen(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:18,cursor:"pointer",padding:"4px 8px"}}>✕</button>
         )}
@@ -542,7 +700,21 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
         </button>
       </div>
 
+      {/* Credits footer */}
+      {credits !== null && (
+        <div style={{padding:"5px 14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTop:"1px solid #0a1020"}}>
+          <div style={{fontSize:10,color:credits>5?"#475569":credits>0?"#f59e0b":"#f87171",fontFamily:"'DM Mono',monospace"}}>
+            {credits > 0
+              ? <span>● {credits} cr · €0.05 / question</span>
+              : <span>⚠ No credits · <button onClick={()=>window._openBilling&&window._openBilling()} style={{background:"none",border:"none",color:"#a78bfa",cursor:"pointer",fontSize:10,fontFamily:"'DM Mono',monospace",padding:0,textDecoration:"underline"}}>top up</button></span>
+            }
+          </div>
+          {credits > 0 && <div style={{fontSize:10,color:"#334155",fontFamily:"'DM Mono',monospace"}}>€0.05 / question</div>}
+        </div>
+      )}
+
     </div>
+      </>}
       )}
     </>
   );
@@ -1286,6 +1458,7 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
           border:"1px solid #1e2d45",borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,0.7)",
           zIndex:2000,overflow:"hidden"}}>
 
+          {view==="billing"&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onBack={()=>setView("main")}/>}
           {view==="main"&&<>
             <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #0f1e30",
               background:"rgba(255,255,255,0.02)",display:"flex",alignItems:"center",gap:14}}>
@@ -1520,6 +1693,13 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
               Change password
+            </button>
+            <button onClick={()=>{setOpen(false);window._openBilling&&window._openBilling();}}
+              style={{width:"100%",padding:"11px 20px",background:"transparent",border:"none",
+                borderTop:"1px solid #0f1e30",color:"#a78bfa",fontSize:12,cursor:"pointer",
+                textAlign:"left",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:11}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              Billing & Credits
             </button>
             <button onClick={doSignOut}
               style={{width:"100%",padding:"11px 20px",background:"transparent",border:"none",
