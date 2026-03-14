@@ -624,7 +624,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
       borderLeft:"1px solid #0f1e30",zIndex:500}}>
 
       {showBilling&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onClose={()=>setShowBilling(false)}/>}
-      {!showBilling&&<>
+      <div style={{display:showBilling?"none":"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
       {/* Header */}
       <div style={{padding:"14px 18px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",background:"linear-gradient(135deg,#0a1628,#060e1e)",flexShrink:0,height:56}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -714,7 +714,7 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
       )}
 
     </div>
-      </>}
+      </div>
       )}
     </>
   );
