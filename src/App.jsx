@@ -458,9 +458,14 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
   const [booted,   setBooted]   = useState(false);
   const showBilling    = showBillingProp;
   const setShowBilling = setShowBillingProp;
-  const [role, setRole] = useState("CFO");
+  const [role, setRole] = useState("—");
 
   const ROLES = {
+    "—": {
+      label: "—",
+      color: "#64748b",
+      focus: `You are responding as a general advisor covering all executive perspectives — financial, commercial, operational, and strategic. Give a balanced view across what matters most right now. Do not favour any single function. You may reference publicly available industry data for context, but NEVER reference any other private company's data.`,
+    },
     CFO: {
       label: "CFO",
       color: "#60a5fa",
