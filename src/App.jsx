@@ -49,7 +49,7 @@ const PASSWORD      = 'stremet2026!';
 const SESSION_KEY   = 'stremet_auth';
 const ACCENT        = '#818cf8';
 const CLIENT_NAME   = 'Stremet Oy';
-const ANTHROPIC_KEY  = 'PASTE_YOUR_KEY_HERE';
+const ANTHROPIC_KEY  = import.meta.env.VITE_ANTHROPIC_KEY;
 const ALLOWED_EMAILS = ['matias.soini@stremet.fi', "niklas.isaksson@targetflow.fi", "virpi.lamsa@targetflow.fi"];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
