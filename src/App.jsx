@@ -363,7 +363,7 @@ function BillingView({clientName, supabase, onClose}) {
         body:JSON.stringify({package: pkg.id, client: clientName}),
       });
       const {url} = await resp.json();
-      if(url) window.location.href = url;
+      if(url) window.open(url, "_blank");
       else alert("Could not start checkout. Please try again.");
     } catch(e) {
       alert("Checkout error: "+e.message);
