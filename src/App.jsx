@@ -1371,7 +1371,8 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
                          csvData,csvName,setCsvData,setCsvName,
                          mode,setMode,parseCSV,unmapped,exportActCSV,exportCSV,downloadTemplate,
                          fileRef,fileRefA,fileRefE,dragOver,setDragOver,dragOverA,setDragOverA,
-                         compLabel,entities,elimData,elimName,setElimData,setElimName,parseElimFile,uploadMsg,setUploadMsg,entityActuals,isGroup}) {
+                         compLabel,entities,elimData,elimName,setElimData,setElimName,parseElimFile,uploadMsg,setUploadMsg,entityActuals,isGroup,
+                         setSidebarOpen,setShowBillingProp}) {
   const [open,    setOpen]   = React.useState(false);
   const [view,    setView]   = React.useState("main");
   const [uploadType, setUploadType] = React.useState("actuals");
@@ -3198,7 +3199,7 @@ function Dashboard() {
             userName={userEmail||"Board Member"}
             enabled={true}
           />
-          <SettingsMenu actData={actData} actName={actName} actLast={actLast} setActData={setActData} setActName={setActName} setActLast={setActLast} csvData={csvData} csvName={csvName} setCsvData={setCsvData} setCsvName={setCsvName} mode={mode} setMode={setMode} parseCSV={parseFile} unmapped={unmapped} exportActCSV={exportActCSV} exportCSV={exportCSV} fileRef={fileRef} fileRefA={fileRefA} fileRefE={fileRefE} dragOver={dragOver} setDragOver={setDragOver} dragOverA={dragOverA} setDragOverA={setDragOverA} compLabel={compLabel} entities={entities} downloadTemplate={downloadTemplate} elimData={elimData} elimName={elimName} setElimData={setElimData} setElimName={setElimName} parseElimFile={parseElimFile} uploadMsg={uploadMsg} setUploadMsg={setUploadMsg} entityActuals={entityActuals} isGroup={isGroup}/>
+          <SettingsMenu actData={actData} actName={actName} actLast={actLast} setActData={setActData} setActName={setActName} setActLast={setActLast} csvData={csvData} csvName={csvName} setCsvData={setCsvData} setCsvName={setCsvName} mode={mode} setMode={setMode} parseCSV={parseFile} unmapped={unmapped} exportActCSV={exportActCSV} exportCSV={exportCSV} fileRef={fileRef} fileRefA={fileRefA} fileRefE={fileRefE} dragOver={dragOver} setDragOver={setDragOver} dragOverA={dragOverA} setDragOverA={setDragOverA} compLabel={compLabel} entities={entities} downloadTemplate={downloadTemplate} elimData={elimData} elimName={elimName} setElimData={setElimData} setElimName={setElimName} parseElimFile={parseElimFile} uploadMsg={uploadMsg} setUploadMsg={setUploadMsg} entityActuals={entityActuals} isGroup={isGroup} setSidebarOpen={setSidebarOpen} setShowBillingProp={setShowBillingProp}/>
         </div>
       </div>
 
