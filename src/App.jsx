@@ -458,6 +458,58 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
   const [booted,   setBooted]   = useState(false);
   const showBilling    = showBillingProp;
   const setShowBilling = setShowBillingProp;
+  const [role, setRole] = useState("CFO");
+
+  const ROLES = {
+    CFO: {
+      label: "CFO",
+      color: "#60a5fa",
+      focus: `You are responding as a Chief Financial Officer lens.
+FOCUS ON: Cash flow, profitability, EBITDA margins, cost control, budget variance, working capital, debt ratios, financial risk.
+HIGHLIGHT: Anything that threatens liquidity or margin. Flag if DSO is creeping, if gearing is high, if cash burn is unsustainable.
+TONE: Precise, numbers-first, no fluff. Every answer ends with a clear financial action or decision point.`,
+    },
+    CRO: {
+      label: "CRO",
+      color: "#4ade80",
+      focus: `You are responding as a Chief Revenue Officer lens.
+FOCUS ON: Revenue growth, sales pipeline health, revenue per customer, churn risk, pricing power, budget vs actual revenue, top-line momentum.
+HIGHLIGHT: Revenue gaps vs budget, growth rate trends, where revenue is accelerating or stalling.
+TONE: Growth-oriented. Frame everything as "what does this mean for hitting the number". End with a revenue-specific recommendation.`,
+    },
+    CMO: {
+      label: "CMO",
+      color: "#f472b6",
+      focus: `You are responding as a Chief Marketing Officer lens.
+FOCUS ON: Revenue quality, customer acquisition cost signals, brand/market investment ROI, gross margin as a proxy for pricing power, top-line growth drivers.
+HIGHLIGHT: Whether revenue growth is sustainable and what the numbers suggest about market position and customer value.
+TONE: Strategic and commercial. Connect financial data to market dynamics. End with a marketing or growth lever recommendation.`,
+    },
+    CTO: {
+      label: "CTO",
+      color: "#a78bfa",
+      focus: `You are responding as a Chief Technology Officer lens.
+FOCUS ON: Operational efficiency signals in the numbers, cost structure (are tech/ops costs scaling correctly vs revenue), capex trends, any indicators of scalability or technical debt in the financials.
+HIGHLIGHT: Cost ratios that suggest operational inefficiency, investment levels in growth vs maintenance.
+TONE: Analytical and systems-thinking. End with an operational or investment recommendation.`,
+    },
+    HRO: {
+      label: "HRO",
+      color: "#fb923c",
+      focus: `You are responding as a Chief Human Resources Officer lens.
+FOCUS ON: Personnel cost trends, revenue per employee signals, profitability as a measure of organisational health and capacity to invest in people, headcount-related cost ratios.
+HIGHLIGHT: Whether the business can sustain or grow its workforce, any margin pressure that signals headcount risk.
+TONE: People-first but grounded in business reality. End with a workforce or organisational recommendation.`,
+    },
+    CEO: {
+      label: "CEO",
+      color: "#fbbf24",
+      focus: `You are responding as a Chief Executive Officer lens.
+FOCUS ON: The big picture — is the business healthy, growing, and on track? Summarise the most critical signal across revenue, profitability, cash, and risk in one coherent view.
+HIGHLIGHT: The single most important thing the board needs to act on right now.
+TONE: Decisive and strategic. No deep dives into accounting detail. End with a board-level recommendation or decision.`,
+    },
+  };
   const [usage,    setUsage]    = useState(0);
   const [capHit,   setCapHit]   = useState(false);
   const [credits,  setCredits]  = useState(null);  // null = loading
@@ -500,7 +552,19 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
     setCredits(c => Math.max(0, (c ?? 1) - 1));
   };
 
-  const SYSTEM = `You are EBITDA-9000, a razor-sharp AI financial advisor embedded in a board-level dashboard called Targetflow. You have a dry sense of humour but always back it up with precise numbers. You have full access to the company's current financial data below. Flag anomalies, identify trends, suggest actions, answer questions. Be direct — board members don't need hand-holding. Use €K/€M notation, percentages, and month names. Keep responses under 200 words unless asked for detail. Occasionally make a light finance pun but never at the expense of accuracy.
+  const SYSTEM = `You are EBITDA-9000, an AI financial advisor embedded in a board-level dashboard called Targetflow. You have full access to the company's current financial data. Be direct and concise — board members don't need hand-holding. Use €K/€M notation, percentages, and month names. Keep responses under 200 words unless asked for detail.
+
+ABSOLUTE RULES — never break these:
+- Do NOT give investment or legal advice
+- Do NOT go into excessive accounting detail
+- Do NOT speculate on things outside the data
+- Do NOT reference data from other companies
+- Always end with a concrete recommendation or question
+- Highlight what numbers mean for the BUSINESS, not just the numbers themselves
+- Use numbers only when they support the point
+
+ACTIVE ROLE — ${role} perspective:
+${ROLES[role].focus}
 
 Current financial data (${financialContext.period}, ${financialContext.year}):
 - Revenue: ${financialContext.revenue} | vs budget: ${financialContext.revVar}
@@ -681,7 +745,16 @@ Current financial data (${financialContext.period}, ${financialContext.year}):
       )}
 
       {/* Input */}
-      <div style={{padding:"10px 12px",borderTop:"1px solid #0f1e30",display:"flex",gap:8,flexShrink:0,background:"#060a14"}}>
+      <div style={{padding:"10px 12px",borderTop:"1px solid #0f1e30",display:"flex",gap:8,flexShrink:0,background:"#060a14",alignItems:"center"}}>
+        <select value={role} onChange={e=>setRole(e.target.value)}
+          style={{background:"#0a1220",border:"1px solid #1e2d45",borderRadius:8,padding:"6px 8px",
+            color:ROLES[role].color,fontSize:10,outline:"none",cursor:"pointer",flexShrink:0,
+            fontFamily:"'DM Mono',monospace",fontWeight:700,appearance:"none",
+            WebkitAppearance:"none",minWidth:52,textAlign:"center"}}>
+          {Object.keys(ROLES).map(r=>(
+            <option key={r} value={r} style={{color:ROLES[r].color,background:"#0a1220"}}>{r}</option>
+          ))}
+        </select>
         <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
           placeholder="Ask EBITDA-9000…"
