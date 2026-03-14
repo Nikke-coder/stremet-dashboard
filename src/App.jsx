@@ -49,7 +49,7 @@ const PASSWORD      = 'stremet2026!';
 const SESSION_KEY   = 'stremet_auth';
 const ACCENT        = '#818cf8';
 const CLIENT_NAME   = 'Stremet Oy';
-const ANTHROPIC_KEY  = import.meta.env.VITE_ANTHROPIC_KEY || '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';
+const ANTHROPIC_KEY  = import.meta.env.VITE_ANTHROPIC_KEY || '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';
 const ALLOWED_EMAILS = ['matias.soini@stremet.fi', "niklas.isaksson@targetflow.fi", "virpi.lamsa@targetflow.fi"];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
