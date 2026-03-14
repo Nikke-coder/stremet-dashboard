@@ -393,7 +393,7 @@ function BillingView({clientName, supabase, onClose}) {
             {credits===null?"…":credits}
             <span style={{fontSize:12,fontWeight:400,color:"#475569",marginLeft:6}}>credits</span>
           </div>
-          <div style={{fontSize:10,color:"#334155",marginTop:4}}>1 credit = 1 question · €0.05 / credit</div>
+          <div style={{fontSize:10,color:"#334155",marginTop:4}}>1 cr = 1 question</div>
         </div>
 
         {/* Packages */}
@@ -785,11 +785,10 @@ Financial data for this company only (${financialContext.period}, ${financialCon
         <div style={{padding:"5px 14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTop:"1px solid #0a1020"}}>
           <div style={{fontSize:10,color:credits>5?"#475569":credits>0?"#f59e0b":"#f87171",fontFamily:"'DM Mono',monospace"}}>
             {credits > 0
-              ? <span>● {credits} cr · €0.05 / question</span>
+              ? <span>● {credits} cr · 1 cr / question</span>
               : <span>⚠ No credits · <button onClick={()=>window._openBilling&&window._openBilling()} style={{background:"none",border:"none",color:"#a78bfa",cursor:"pointer",fontSize:10,fontFamily:"'DM Mono',monospace",padding:0,textDecoration:"underline"}}>top up</button></span>
             }
           </div>
-          {credits > 0 && <div style={{fontSize:10,color:"#334155",fontFamily:"'DM Mono',monospace"}}>€0.05 / question</div>}
         </div>
       )}
 
