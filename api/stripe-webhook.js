@@ -1,25 +1,14 @@
-// api/stripe-webhook.js — Vercel Serverless Function
-// Deploy this in each dashboard repo (or a shared repo)
-// Env vars needed in Vercel:
-//   STRIPE_SECRET_KEY       = sk_live_...
-//   STRIPE_WEBHOOK_SECRET   = whsec_...
-//   SUPABASE_URL            = https://jzqgndcrukggcwthxyrv.supabase.co
-//   SUPABASE_SERVICE_KEY    = (service role key, NOT anon)
-
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-const stripe    = new Stripe(process.env.STRIPE_SECRET_KEY);
-const supabase  = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+const stripe   = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const supabase = createClient(
+  "https://jzqgndcrukggcwthxyrv.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6cWduZGNydWtnZ2N3dGh4eXJ2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjk1MDc0MiwiZXhwIjoyMDg4NTI2NzQyfQ.9MN8k-RkBYskeAYDpBQAKWVEoT_L81-uy4ivV_b0L5w"
 );
 
-const PACKAGES = {
-  spark:   200,
-  insight: 400,
-  oracle:  1000,
-};
+const PACKAGES = { spark: 200, insight: 400, oracle: 1000 };
 
 export const config = { api: { bodyParser: false } };
 
@@ -30,7 +19,7 @@ async function buffer(readable) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end("Method Not Allowed");
+  if (req.method !== "POST") return res.status(405).end();
 
   const buf = await buffer(req);
   const sig = req.headers["stripe-signature"];
@@ -39,27 +28,23 @@ export default async function handler(req, res) {
   try {
     event = stripe.webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error("Webhook signature error:", err.message);
+    console.error("Webhook sig error:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   if (event.type === "checkout.session.completed") {
-    const session  = event.data.object;
-    const client   = session.metadata?.client;
-    const pkg      = session.metadata?.package;   // 'spark' | 'insight' | 'oracle'
-    const credits  = PACKAGES[pkg];
+    const session = event.data.object;
+    const client  = session.metadata?.client;
+    const pkg     = session.metadata?.package;
+    const credits = PACKAGES[pkg];
 
     if (!client || !credits) {
       console.error("Missing metadata:", session.metadata);
       return res.status(400).send("Missing metadata");
     }
 
-    // Upsert balance
     const { data: existing } = await supabase
-      .from("ai_credits")
-      .select("balance")
-      .eq("client", client)
-      .single();
+      .from("ai_credits").select("balance").eq("client", client).maybeSingle();
 
     const newBalance = (existing?.balance || 0) + credits;
 
@@ -68,16 +53,11 @@ export default async function handler(req, res) {
       { onConflict: "client" }
     );
 
-    // Log transaction
     await supabase.from("ai_transactions").insert({
-      client,
-      credits,
-      type:      "purchase",
-      package:   pkg,
-      stripe_id: session.id,
+      client, credits, type: "purchase", package: pkg, stripe_id: session.id,
     });
 
-    console.log(`✓ ${client} purchased ${pkg} (+${credits} credits)`);
+    console.log(`✓ ${client} +${credits} cr → balance: ${newBalance}`);
   }
 
   res.json({ received: true });

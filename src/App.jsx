@@ -2557,9 +2557,8 @@ function Dashboard() {
     // Auto-open billing after Stripe redirect
     const params = new URLSearchParams(window.location.search);
     if(params.get("billing")==="success") {
-      setSidebarOpen(true);
-      setShowBilling(true);
       window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(()=>{ setSidebarOpen(true); setShowBilling(true); }, 1500);
     }
   },[]);
 
