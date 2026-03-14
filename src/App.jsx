@@ -539,6 +539,11 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
 
   const incrementUsage = async () => {
     if(!supabase) return;
+    // Fetch current balance fresh from DB to avoid stale state
+    const { data: cr } = await supabase.from("ai_credits")
+      .select("balance").eq("client", CLIENT_NAME).maybeSingle();
+    const currentBal = cr?.balance ?? 0;
+    const newBal = Math.max(0, currentBal - 1);
     await Promise.all([
       supabase.from("ai_usage").upsert({
         client: CLIENT_NAME, month: thisMonth(),
@@ -546,7 +551,7 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
       }, { onConflict: "client,month", ignoreDuplicates: false }),
       supabase.from("ai_credits").upsert({
         client: CLIENT_NAME,
-        balance: Math.max(0, (credits ?? 1) - 1),
+        balance: newBal,
         updated_at: new Date().toISOString()
       }, { onConflict: "client" }),
       supabase.from("ai_transactions").insert({
@@ -554,7 +559,7 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
       }),
     ]);
     setUsage(u => u + 1);
-    setCredits(c => Math.max(0, (c ?? 1) - 1));
+    setCredits(newBal);
   };
 
   const SYSTEM = `You are EBITDA-9000, an AI financial advisor embedded in a board-level dashboard called Targetflow.
