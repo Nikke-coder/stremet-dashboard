@@ -613,7 +613,8 @@ Financial data for this company only (${financialContext.period}, ${financialCon
         })
       });
       const data = await res.json();
-      const text = data.content?.find(b=>b.type==="text")?.text || "Unable to generate summary.";
+      console.log("Boot API:", JSON.stringify(data));
+      const text = data.content?.find(b=>b.type==="text")?.text || data.error?.message || JSON.stringify(data);
       setMessages([{role:"assistant",content:text,auto:true}]);
       await incrementUsage();
       if(!open) {}
@@ -648,7 +649,8 @@ Financial data for this company only (${financialContext.period}, ${financialCon
         })
       });
       const data = await res.json();
-      const reply = data.content?.find(b=>b.type==="text")?.text || "No response.";
+      console.log("API response:", JSON.stringify(data));
+      const reply = data.content?.find(b=>b.type==="text")?.text || data.error?.message || JSON.stringify(data);
       setMessages(prev=>[...prev,{role:"assistant",content:reply}]);
       await incrementUsage();
     } catch(e) {
