@@ -335,7 +335,7 @@ function BillingView({clientName, supabase, onClose}) {
     if(!supabase) return;
     const load = async () => {
       const [{data:cr},{data:tx}] = await Promise.all([
-        supabase.from("ai_credits").select("balance").eq("client",clientName).single(),
+        supabase.from("ai_credits").select("balance").eq("client",clientName).maybeSingle(),
         supabase.from("ai_transactions").select("*").eq("client",clientName).order("created_at",{ascending:false}).limit(10),
       ]);
       setCredits(cr?.balance ?? 0);
@@ -475,7 +475,7 @@ function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSid
     if(!supabase) return 0;
     const [{ data: usageData }, { data: credData }] = await Promise.all([
       supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).single(),
-      supabase.from("ai_credits").select("balance").eq("client", CLIENT_NAME).single(),
+      supabase.from("ai_credits").select("balance").eq("client", CLIENT_NAME).maybeSingle(),
     ]);
     const count = usageData?.count || 0;
     const bal   = credData?.balance ?? 0;
