@@ -2554,6 +2554,13 @@ function Dashboard() {
   const [userEmail,   setUserEmail]  = useState("");
   React.useEffect(()=>{
     if(supabase) supabase.auth.getUser().then(({data})=>{ if(data?.user?.email) setUserEmail(data.user.email); });
+    // Auto-open billing after Stripe redirect
+    const params = new URLSearchParams(window.location.search);
+    if(params.get("billing")==="success") {
+      setSidebarOpen(true);
+      setShowBilling(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   },[]);
 
   const [tab,         setTab]        = useState("group");
