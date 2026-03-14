@@ -451,18 +451,13 @@ function BillingView({clientName, supabase, onClose}) {
 }
 
 
-function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSidebarOpen=()=>{}}) {
+function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSidebarOpen=()=>{}, showBillingProp=false, setShowBillingProp=()=>{}}) {
   const [messages, setMessages] = useState([]);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
   const [booted,   setBooted]   = useState(false);
-  const [showBilling, setShowBilling] = useState(false);
-
-  React.useEffect(()=>{
-    const handler = () => setShowBilling(true);
-    window.addEventListener("open-billing", handler);
-    return () => window.removeEventListener("open-billing", handler);
-  },[]);
+  const showBilling    = showBillingProp;
+  const setShowBilling = setShowBillingProp;
   const [usage,    setUsage]    = useState(0);
   const [capHit,   setCapHit]   = useState(false);
   const [credits,  setCredits]  = useState(null);  // null = loading
@@ -1694,7 +1689,7 @@ function SettingsMenu({actData,actName,actLast,setActData,setActName,setActLast,
               </svg>
               Change password
             </button>
-            <button onClick={()=>{setOpen(false);window._openBilling&&window._openBilling();}}
+            <button onClick={()=>{setOpen(false);setSidebarOpen(true);setShowBillingProp(true);}}
               style={{width:"100%",padding:"11px 20px",background:"transparent",border:"none",
                 borderTop:"1px solid #0f1e30",color:"#a78bfa",fontSize:12,cursor:"pointer",
                 textAlign:"left",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:11}}>
@@ -2464,7 +2459,8 @@ function CommentsPanel({supabase, clientName, userName, enabled}) {
 function Dashboard() {
   const winW = useWindowWidth();
   const isMobile = winW < 768;
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen,  setSidebarOpen]  = useState(false);
+  const [showBilling,  setShowBilling]  = useState(false);
   const [userEmail,   setUserEmail]  = useState("");
   React.useEffect(()=>{
     if(supabase) supabase.auth.getUser().then(({data})=>{ if(data?.user?.email) setUserEmail(data.user.email); });
@@ -3479,7 +3475,7 @@ function Dashboard() {
         equity:      fmt(endEq),
         cash:        fmt(actuals.cash[E]||0),
         gmPct, emPct, roePct, eqR, gear, intCov, dso, dio, dpo,
-      }} isMobile={isMobile} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}/>
+      }} isMobile={isMobile} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} showBillingProp={showBilling} setShowBillingProp={setShowBilling}/>
 
 
     </div>
