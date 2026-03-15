@@ -319,7 +319,7 @@ const PeriodBar = ({startM,endM,setStart,setEnd,compLabel,actLast}) => (
 );
 
 // ── BillingView ──────────────────────────────────────────────────────────────
-function BillingView({clientName, supabase, onClose}) {
+function BillingView({clientName, supabase, onClose, userEmail=""}) {
   const [credits,  setCredits]  = React.useState(null);
   const [history,  setHistory]  = React.useState([]);
   const [buying,   setBuying]   = React.useState(null);
@@ -334,9 +334,10 @@ function BillingView({clientName, supabase, onClose}) {
   React.useEffect(()=>{
     if(!supabase) return;
     const load = async () => {
+      const email = userEmail || clientName;
       const [{data:cr},{data:tx}] = await Promise.all([
-        supabase.from("ai_credits").select("balance").eq("client",clientName).maybeSingle(),
-        supabase.from("ai_transactions").select("*").eq("client",clientName).order("created_at",{ascending:false}).limit(10),
+        supabase.from("ai_credits").select("balance").eq("user_email",email).maybeSingle(),
+        supabase.from("ai_transactions").select("*").eq("user_email",email).order("created_at",{ascending:false}).limit(10),
       ]);
       setCredits(cr?.balance ?? 0);
       setHistory(tx || []);
@@ -360,7 +361,7 @@ function BillingView({clientName, supabase, onClose}) {
       const resp = await fetch("/api/create-checkout", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({package: pkg.id, client: clientName}),
+        body:JSON.stringify({package: pkg.id, client: clientName, user_email: userEmail}),
       });
       const {url} = await resp.json();
       if(url) window.open(url, "_blank");
@@ -451,7 +452,7 @@ function BillingView({clientName, supabase, onClose}) {
 }
 
 
-function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSidebarOpen=()=>{}, showBillingProp=false, setShowBillingProp=()=>{}}) {
+function AiAssistant({financialContext, isMobile=false, sidebarOpen=true, setSidebarOpen=()=>{}, showBillingProp=false, setShowBillingProp=()=>{}, userEmailProp=""}) {
   const [messages, setMessages] = useState([]);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
@@ -525,9 +526,10 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
 
   const getUsage = async () => {
     if(!supabase) return 0;
+    const email = userEmailProp || CLIENT_NAME;
     const [{ data: usageData }, { data: credData }] = await Promise.all([
       supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).maybeSingle(),
-      supabase.from("ai_credits").select("balance").eq("client", CLIENT_NAME).maybeSingle(),
+      supabase.from("ai_credits").select("balance").eq("user_email", email).maybeSingle(),
     ]);
     const count = usageData?.count || 0;
     const bal   = credData?.balance ?? 0;
@@ -539,9 +541,9 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
 
   const incrementUsage = async () => {
     if(!supabase) return;
-    // Fetch current balance fresh from DB to avoid stale state
+    const email = userEmailProp || CLIENT_NAME;
     const { data: cr } = await supabase.from("ai_credits")
-      .select("balance").eq("client", CLIENT_NAME).maybeSingle();
+      .select("balance").eq("user_email", email).maybeSingle();
     const currentBal = cr?.balance ?? 0;
     const newBal = Math.max(0, currentBal - 1);
     await Promise.all([
@@ -550,12 +552,11 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
         count: usage + 1, updated_at: new Date().toISOString()
       }, { onConflict: "client,month", ignoreDuplicates: false }),
       supabase.from("ai_credits").upsert({
-        client: CLIENT_NAME,
-        balance: newBal,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "client" }),
+        user_email: email, client: CLIENT_NAME,
+        balance: newBal, updated_at: new Date().toISOString()
+      }, { onConflict: "user_email" }),
       supabase.from("ai_transactions").insert({
-        client: CLIENT_NAME, credits: -1, type: "usage",
+        client: CLIENT_NAME, user_email: email, credits: -1, type: "usage",
       }),
     ]);
     setUsage(u => u + 1);
@@ -578,6 +579,15 @@ ABSOLUTE RULES:
 - Highlight what numbers mean for THIS business
 - Be concise — under 200 words unless asked for more
 
+LANGUAGE RULES:
+- Detect the language of each incoming question automatically
+- If the question is in Finnish: respond in Finnish
+- If the question is in Swedish: respond in Swedish
+- If the question is in English: respond in English
+- If the question is in any other language: politely decline to answer in that language, and explain in English, Finnish AND Swedish that only Finnish, Swedish and English are supported. Do not answer the question itself.
+
+DISCLAIMER: Always end responses with a brief note that this analysis is based on available data only, may contain errors, and users should verify all information independently before making decisions.
+
 ACTIVE ROLE — ${role} perspective:
 ${ROLES[role].focus}
 
@@ -597,7 +607,8 @@ Financial data for this company only (${financialContext.period}, ${financialCon
     if(booted) return;
     setBooted(true);
     const currentUsage = await getUsage();
-    const bal = credits ?? (await supabase.from("ai_credits").select("balance").eq("client",CLIENT_NAME).maybeSingle().then(r=>r.data?.balance??0));
+    const email = userEmailProp || CLIENT_NAME;
+    const bal = credits ?? (await supabase.from("ai_credits").select("balance").eq("user_email",email).maybeSingle().then(r=>r.data?.balance??0));
     if(bal <= 0) {
       setMessages([{role:"assistant",content:"No credits remaining. Top up your balance in Settings → Billing to continue using EBITDA-9000.",auto:true,err:true}]);
       setCapHit(true);
@@ -699,7 +710,7 @@ Financial data for this company only (${financialContext.period}, ${financialCon
       display:"flex",flexDirection:"column",background:"#060a14",
       borderLeft:"1px solid #0f1e30",zIndex:500}}>
 
-      {showBilling&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onClose={()=>setShowBilling(false)}/>}
+      {showBilling&&<BillingView clientName={CLIENT_NAME} supabase={supabase} onClose={()=>setShowBilling(false)} userEmail={userEmailProp}/>}
       <div style={{display:showBilling?"none":"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
       {/* Header */}
       <div style={{padding:"14px 18px",borderBottom:"1px solid #0f1e30",display:"flex",alignItems:"center",justifyContent:"space-between",background:"linear-gradient(135deg,#0a1628,#060e1e)",flexShrink:0,height:56}}>
@@ -3571,7 +3582,7 @@ function Dashboard() {
         equity:      fmt(endEq),
         cash:        fmt(actuals.cash[E]||0),
         gmPct, emPct, roePct, eqR, gear, intCov, dso, dio, dpo,
-      }} isMobile={isMobile} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} showBillingProp={showBilling} setShowBillingProp={setShowBilling}/>
+      }} isMobile={isMobile} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} showBillingProp={showBilling} setShowBillingProp={setShowBilling} userEmailProp={userEmail}/>
 
 
     </div>
