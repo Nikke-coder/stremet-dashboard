@@ -531,11 +531,12 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
       supabase.from("ai_usage").select("count").eq("client", CLIENT_NAME).eq("month", thisMonth()).maybeSingle(),
       supabase.from("ai_credits").select("balance").eq("user_email", email).maybeSingle(),
     ]);
-    const count = usageData?.count || 0;
-    const bal   = credData?.balance ?? 0;
+    const count    = usageData?.count || 0;
+    const bal      = credData?.balance ?? 0;
+    const unlimited = credData?.unlimited ?? false;
     setUsage(count);
-    setCredits(bal);
-    if(bal <= 0) setCapHit(true);
+    setCredits(unlimited ? Infinity : bal);
+    if(!unlimited && bal <= 0) setCapHit(true);
     return count;
   };
 
@@ -543,18 +544,19 @@ TONE: Decisive and strategic. No deep dives into accounting detail. End with a b
     if(!supabase) return;
     const email = userEmailProp || CLIENT_NAME;
     const { data: cr } = await supabase.from("ai_credits")
-      .select("balance").eq("user_email", email).maybeSingle();
+      .select("balance,unlimited").eq("user_email", email).maybeSingle();
     const currentBal = cr?.balance ?? 0;
-    const newBal = Math.max(0, currentBal - 1);
+    const isUnlimited = cr?.unlimited ?? false;
+    const newBal = isUnlimited ? currentBal : Math.max(0, currentBal - 1);
     await Promise.all([
       supabase.from("ai_usage").upsert({
         client: CLIENT_NAME, month: thisMonth(),
         count: usage + 1, updated_at: new Date().toISOString()
       }, { onConflict: "client,month", ignoreDuplicates: false }),
-      supabase.from("ai_credits").upsert({
+      ...(isUnlimited ? [] : [supabase.from("ai_credits").upsert({
         user_email: email, client: CLIENT_NAME,
         balance: newBal, updated_at: new Date().toISOString()
-      }, { onConflict: "user_email" }),
+      }, { onConflict: "user_email" })]),
       supabase.from("ai_transactions").insert({
         client: CLIENT_NAME, user_email: email, credits: -1, type: "usage",
       }),
@@ -721,7 +723,7 @@ Financial data for this company only (${financialContext.period}, ${financialCon
             <div style={{fontSize:9,color:loading?AMBER:GREEN,fontFamily:"'DM Mono',monospace"}}>{loading?"Crunching numbers…":"● Online"}</div>
           </div>
         </div>
-        {credits!==null&&<div style={{fontSize:9,fontFamily:"'DM Mono',monospace",color:credits>20?"#334155":credits>5?"#f59e0b":"#f87171",fontWeight:credits<=5?700:400}}>{credits} cr</div>}
+        {credits!==null&&<div style={{fontSize:9,fontFamily:"'DM Mono',monospace",color:credits===Infinity?"#4ade80":credits>20?"#334155":credits>5?"#f59e0b":"#f87171",fontWeight:credits<=5?700:400}}>{credits===Infinity?"∞":credits} cr</div>}
         {isMobile && (
           <button onClick={()=>setSidebarOpen(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:18,cursor:"pointer",padding:"4px 8px"}}>✕</button>
         )}
@@ -801,7 +803,7 @@ Financial data for this company only (${financialContext.period}, ${financialCon
         <div style={{padding:"5px 14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTop:"1px solid #0a1020"}}>
           <div style={{fontSize:10,color:credits>5?"#475569":credits>0?"#f59e0b":"#f87171",fontFamily:"'DM Mono',monospace"}}>
             {credits > 0
-              ? <span>● {credits} cr · 1 cr / question</span>
+              ? <span>● {credits===Infinity?"∞":credits} cr · {credits===Infinity?"unlimited":"1 cr / question"}</span>
               : <span>⚠ No credits · <button onClick={()=>window._openBilling&&window._openBilling()} style={{background:"none",border:"none",color:"#a78bfa",cursor:"pointer",fontSize:10,fontFamily:"'DM Mono',monospace",padding:0,textDecoration:"underline"}}>top up</button></span>
             }
           </div>
